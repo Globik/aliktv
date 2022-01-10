@@ -1,5 +1,7 @@
 // ssh root@45.89.66.225 (chelikon.space)
 const Koa = require('koa');
+const fs = require('fs');
+const https = require('https');
 const dkey = './data/chel_key.pem';
 const dcert = './data/chel_cert.pem';
 const ca = './data/chel_ca.cert';
