@@ -1,0 +1,25 @@
+{
+  "name": "aliktv",
+  "version": "1.0.0",
+  "description": "live stream",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies":{
+	  "koa": "^2.13.4"
+	  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Globik/aliktv.git"
+  },
+  "keywords": [
+    "mediasoup.js"
+  ],
+  "author": "Alik Gafarov",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Globik/aliktv/issues"
+  },
+  "homepage": "https://github.com/Globik/aliktv#readme"
+}
