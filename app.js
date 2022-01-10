@@ -26,7 +26,7 @@ if(process.env.DEVELOPMENT !== "yes"){
 	cert: fs.readFileSync(dcert),
 	ca: fs.readFileSync(ca)
 	};
-	servak = https.createServer(ssl_options, app.callback()).listen(SPORT);
+	servak = https.createServer(ssl_options, app.callback()).listen(HTTPS_PORT);
 	console.log("Must on, port: https://127.0.0.1:", HTTPS_PORT, " started.");
 	
 }else{
