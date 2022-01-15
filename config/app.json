@@ -1,0 +1,21 @@
+{
+ "meta":{
+	 "url":"https://chelikon.space",
+	 "image":"https://chelikon.space/images/home2.jpg",
+	 "site_name": "chelikon",
+	 "main_page":
+	 {"title": "Видеотрансляция с IP-камер",
+      "description": "Круглосуточная трансляция жилища Алика с IP-камер. Заработок в интернете."		 
+	},
+	 "blog":
+	 {"title":"Блог o заработке.",
+	  "description":"Блог о биткоинах, заработке в интернете, веб камерах."
+	 }},
+"warnig":"",
+"check_age":false,
+"site_name": "chelikon",
+"site_domain": "chelikon.space",
+"vk": "https://vk.com/id98506638",
+"telega": "https://t.me/Globik2",
+"yandex_pay": false
+}

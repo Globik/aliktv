@@ -1,0 +1,23 @@
+.articles-container{
+ackground:red;
+padding:20px;
+margin-top:20px;
+margin-bottom:20px;
+}
+.pactive{color:green;display:inline-block;}
+.num{
+border:1px solid pink;
+display:inline-block;
+padding:10px;
+margin:10px;
+}
+h3{
+line-height:1.5;
+margin-bottom:10px;
+}
+.d-author,.d-date{
+font-size:0.7rem;
+
+color:rgb(0,10,20);
+line-height:2.5;
+}

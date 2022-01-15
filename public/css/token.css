@@ -1,0 +1,9 @@
+form div{margin-top:10px;margin-bottom:10px;}
+#BTCAddressPop{backgrund: red;width:100%;}
+#BTCAddressPop div{margin-top: 15px;margin-bottom:15px;}
+#btcadrspan{background: blue;}
+#btcamount,#tokamount{border: 1px solid yellow;padding: 9px;}
+#BTCAddressContainer h3{margin-bottom:1px;}
+#qrcode{display:inline-block;}
+#BTCAddressContainer{font-size:0.8rem;color: black;padding:20px;background: rgba(200, 255, 220, 0.5);}
+#erfolgBTC.green{color:green;}
