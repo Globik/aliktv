@@ -1,0 +1,1551 @@
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 10.19 (Ubuntu 10.19-0ubuntu0.18.04.1)
+-- Dumped by pg_dump version 10.19 (Ubuntu 10.19-0ubuntu0.18.04.1)
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: 
+--
+
+CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+
+
+--
+-- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+
+
+--
+-- Name: brole_type_enum; Type: TYPE; Schema: public; Owner: root
+--
+
+CREATE TYPE public.brole_type_enum AS ENUM (
+    'superadmin',
+    'moder',
+    'non',
+    'ban',
+    'fake'
+);
+
+
+ALTER TYPE public.brole_type_enum OWNER TO root;
+
+--
+-- Name: token_type_enum; Type: TYPE; Schema: public; Owner: root
+--
+
+CREATE TYPE public.token_type_enum AS ENUM (
+    'validation',
+    'reset'
+);
+
+
+ALTER TYPE public.token_type_enum OWNER TO root;
+
+--
+-- Name: bitaps_cb(integer, character varying, integer); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.bitaps_cb(usid integer, bcode character varying, amt integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+declare 
+ptokens int;
+begin
+if exists(select 1 from bitaps_tmp where bitaps_tmp.pc=bitaps_cb.bcode) then
+select trunc(bitaps_cb.amt/80000) into ptokens;
+update buser set items = buser.items + ptokens where buser.id = bitaps_cb.usid;
+delete from bitaps_tmp where bitaps_tmp.pc=bitaps_cb.bcode;
+insert into tokens_buy(us_id, amount, tok) values(bitaps_cb.usid,bitaps_cb.amt,ptokens);
+perform pg_notify('token_buy', json_build_object('us_id', bitaps_cb.usid,'items', ptokens,'amt', bitaps_cb.amt)::text);
+else
+end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.bitaps_cb(usid integer, bcode character varying, amt integer) OWNER TO root;
+
+--
+-- Name: expire_address(); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.expire_address() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+delete from bitaps_tmp where crat < now() - '59 minutes'::interval and st = 0;
+RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.expire_address() OWNER TO root;
+
+--
+-- Name: expire_chat_delete_old_rows(); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.expire_chat_delete_old_rows() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+_cnt int;
+BEGIN
+-- DELETE FROM chat WHERE us_id=NEW.us_id AND tz < NOW() - INTERVAL '12 minutes';
+-- RETURN NEW;
+select count(*) from chat where us_id=NEW.us_id into _cnt;
+if _cnt = 50 then
+delete from chat where tz=(select min(tz) from chat where us_id=NEW.us_id);
+elsif _cnt > 50 then
+delete from chat where tz in (select tz from chat where us_id=NEW.us_id limit _cnt - 50);
+end if;
+RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.expire_chat_delete_old_rows() OWNER TO root;
+
+--
+-- Name: expire_obi_delete_old_rows(); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.expire_obi_delete_old_rows() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+_cnt int;
+BEGIN
+-- DELETE FROM chat WHERE us_id=NEW.us_id AND tz < NOW() - INTERVAL '12 minutes';
+-- RETURN NEW;
+select count(*) from obi  into _cnt;
+if _cnt = 100 then
+delete from obi where ati=(select min(ati) from obi);
+elsif _cnt > 100 then
+delete from obi where ati in (select ati from obi limit _cnt - 100);
+end if;
+RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.expire_obi_delete_old_rows() OWNER TO root;
+
+--
+-- Name: get_address(integer, integer, text); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.get_address(usid integer, st integer, zeit text) RETURNS TABLE(adr character varying, bname character varying, us_id integer)
+    LANGUAGE plpgsql
+    AS $_$
+begin
+return query select bitaps_tmp.adr, bitaps_tmp.bname, bitaps_tmp.us_id
+from bitaps_tmp where bitaps_tmp.us_id = get_address.usid and crat > now() - ($3 || ' minutes')::interval;
+end;
+$_$;
+
+
+ALTER FUNCTION public.get_address(usid integer, st integer, zeit text) OWNER TO root;
+
+--
+-- Name: notify_smart(); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.notify_smart() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE 
+	data json;
+	notification json;
+BEGIN
+	IF(TG_OP = 'DELETE') THEN
+		data = row_to_json(OLD);
+		ELSE
+		data=row_to_json(NEW);
+		END IF;
+		notification = json_build_object('table', TG_TABLE_NAME, 'action', TG_OP, 'data',data);
+		PERFORM pg_notify('on_smart_cb', notification::text);
+		RETURN NULL;
+		END;
+		$$;
+
+
+ALTER FUNCTION public.notify_smart() OWNER TO root;
+
+--
+-- Name: on_token_order(character varying, integer, numeric, numeric, bigint); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.on_token_order(bname character varying, tok integer, tsum numeric, wsum numeric, order_id bigint) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+begin
+insert into token_order(bname,tok,order_id,tsum,wsum)  
+values(on_token_order.bname, on_token_order.tok, on_token_order.order_id, on_token_order.tsum, on_token_order.wsum);
+update buser set items=items+on_token_order.tok where buser.bname=on_token_order.bname;
+end;
+$$;
+
+
+ALTER FUNCTION public.on_token_order(bname character varying, tok integer, tsum numeric, wsum numeric, order_id bigint) OWNER TO root;
+
+--
+-- Name: on_token_payout(character varying, numeric, integer); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.on_token_payout(tom character varying, suma numeric, pid integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+begin
+insert into token_payout(tom,suma,pid) values(on_token_payout.tom, on_token_payout.suma,on_token_payout.pid);
+update buser set items=0,promo=0 where buser.id=on_token_payout.pid;	
+end;
+$$;
+
+
+ALTER FUNCTION public.on_token_payout(tom character varying, suma numeric, pid integer) OWNER TO root;
+
+--
+-- Name: on_token_transfer(character varying, character varying, integer); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.on_token_transfer(tom character varying, fro character varying, amt integer) RETURNS SETOF integer
+    LANGUAGE plpgsql
+    AS $$
+declare
+minus_result int;
+plus_result int;
+begin
+update buser set items=items-on_token_transfer.amt where buser.bname=on_token_transfer.fro returning items into minus_result;
+update buser set items=items+on_token_transfer.amt  where buser.bname=on_token_transfer.tom returning items into plus_result;
+return next minus_result;
+return next plus_result;
+end;
+$$;
+
+
+ALTER FUNCTION public.on_token_transfer(tom character varying, fro character varying, amt integer) OWNER TO root;
+
+--
+-- Name: request_password_reset(text); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.request_password_reset(email text) RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+declare
+tok uuid;
+begin
+delete from tokens where token_type = 'reset' and tokens.email = request_password_reset.email;
+select uuid_generate_v4() into tok;
+
+insert into tokens(token, token_type, email) values(tok, 'reset', request_password_reset.email);
+
+-- perform pg_notify('reset',
+-- json_build_object('email', request_password_reset.email, 'token', tok, 'token_type', 'reset')::text);
+return tok;
+end;
+$$;
+
+
+ALTER FUNCTION public.request_password_reset(email text) OWNER TO root;
+
+--
+-- Name: reset_password(text, uuid, text); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.reset_password(email text, token uuid, pwd text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+declare
+tok uuid;
+begin
+if exists(select 1 from tokens
+where tokens.email = reset_password.email
+and tokens.token = reset_password.token
+and token_type = 'reset') then
+--update buser set pwd=crypt(reset_password.pwd, gen_salt('bf', 8)) where buser.email = reset_password.email;
+update buser set pwd=reset_password.pwd where buser.email=reset_password.email;
+delete from tokens where tokens.email = reset_password.email
+and tokens.token = reset_password.token
+and token_type = 'reset';
+else
+raise invalid_password using message = 'Invalid email or token';
+end if;
+
+delete from tokens where token_type = 'reset' and tokens.email = reset_password.email;
+
+select uuid_generate_v4() into tok;
+insert into tokens(token, token_type, email) values(tok, 'reset', reset_password.email);
+
+-- perform pg_notify('reset',
+-- json_build_object(
+-- 'email', reset_password.email,
+-- 'token', tok, 'token_type', 'reseted')::text);
+end;
+$$;
+
+
+ALTER FUNCTION public.reset_password(email text, token uuid, pwd text) OWNER TO root;
+
+--
+-- Name: set_subscribe(integer, text); Type: FUNCTION; Schema: public; Owner: root
+--
+
+CREATE FUNCTION public.set_subscribe(sid integer, did text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+begin
+if exists(select 0 from subscribe
+where subscribe.sid = set_subscribe.sid
+and subscribe.did = set_subscribe.did) then
+raise invalid_password using message = 'Already subscribed';
+else
+insert into subscribe(sid,did) values(set_subscribe.sid,set_subscribe.did);
+end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.set_subscribe(sid integer, did text) OWNER TO root;
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- Name: ads; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.ads (
+    art text,
+    sub character varying(10)
+);
+
+
+ALTER TABLE public.ads OWNER TO root;
+
+--
+-- Name: bitaps_tmp; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.bitaps_tmp (
+    bname character varying(16) NOT NULL,
+    us_id integer NOT NULL,
+    inv character varying(100) NOT NULL,
+    pc character varying(100) NOT NULL,
+    adr character varying(100) NOT NULL,
+    st integer DEFAULT 0 NOT NULL,
+    crat timestamp with time zone DEFAULT now() NOT NULL,
+    lm timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.bitaps_tmp OWNER TO root;
+
+--
+-- Name: blog; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.blog (
+    id integer NOT NULL,
+    auth character varying(20) NOT NULL,
+    title text NOT NULL,
+    slug text NOT NULL,
+    body text NOT NULL,
+    descr text,
+    cr_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.blog OWNER TO root;
+
+--
+-- Name: blog_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.blog ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.blog_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: buser; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.buser (
+    id integer NOT NULL,
+    pwd character varying(100) NOT NULL,
+    bname character varying(16) NOT NULL,
+    email text,
+    items integer DEFAULT 0 NOT NULL,
+    proz integer DEFAULT 50 NOT NULL,
+    model boolean DEFAULT false NOT NULL,
+    brole public.brole_type_enum DEFAULT 'non'::public.brole_type_enum NOT NULL,
+    crat timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL,
+    ll timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL,
+    ava text,
+    stat text,
+    lng character varying(2) DEFAULT 'ru'::character varying NOT NULL,
+    promo integer DEFAULT 0 NOT NULL,
+    cadr character varying(40),
+    bage integer DEFAULT 18 NOT NULL,
+    sexor character varying(10) DEFAULT 'hetero'::character varying NOT NULL,
+    CONSTRAINT buser_bage_check CHECK ((bage >= 10)),
+    CONSTRAINT buser_email_check CHECK ((email ~* '^.+@.+\..+$'::text)),
+    CONSTRAINT positivcheck CHECK ((items >= 0))
+);
+
+
+ALTER TABLE public.buser OWNER TO root;
+
+--
+-- Name: buser_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.buser ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.buser_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: chat; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.chat (
+    msg text,
+    tz timestamp with time zone DEFAULT now() NOT NULL,
+    us_id integer NOT NULL,
+    nick character varying(25) NOT NULL
+);
+
+
+ALTER TABLE public.chat OWNER TO root;
+
+--
+-- Name: cladr; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.cladr (
+    id integer NOT NULL,
+    nick character varying(16) NOT NULL,
+    cadr character varying(40),
+    padr character varying(40),
+    cadrtest character varying(40),
+    padrtest character varying(40),
+    inv character varying(70) NOT NULL,
+    pc character varying(70) NOT NULL,
+    btc_amt numeric DEFAULT 0 NOT NULL,
+    btc_all numeric DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE public.cladr OWNER TO root;
+
+--
+-- Name: cladr_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.cladr ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.cladr_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: obi; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.obi (
+    id integer NOT NULL,
+    ati timestamp with time zone DEFAULT now() NOT NULL,
+    bnick character varying(50) NOT NULL,
+    msg text NOT NULL,
+    isg integer DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE public.obi OWNER TO root;
+
+--
+-- Name: obi_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.obi ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.obi_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: prim_adr; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.prim_adr (
+    adr character varying(40) NOT NULL,
+    type boolean,
+    xir jsonb,
+    tadr character varying(60),
+    ya_sec text,
+    xir_sec text
+);
+
+
+ALTER TABLE public.prim_adr OWNER TO root;
+
+--
+-- Name: reklama; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.reklama (
+    id integer NOT NULL,
+    src character varying(100) NOT NULL,
+    href character varying(100) NOT NULL,
+    anf date NOT NULL,
+    ed date NOT NULL,
+    nick character varying(20) NOT NULL,
+    statu integer DEFAULT 1 NOT NULL,
+    meta text,
+    typ integer NOT NULL,
+    price integer NOT NULL,
+    cr_at timestamp without time zone DEFAULT now() NOT NULL,
+    cl integer DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE public.reklama OWNER TO root;
+
+--
+-- Name: reklama_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.reklama ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.reklama_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: sean; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.sean (
+    id integer NOT NULL,
+    sname character varying(16) NOT NULL,
+    typ integer NOT NULL,
+    crat timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL,
+    endat timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL
+);
+
+
+ALTER TABLE public.sean OWNER TO root;
+
+--
+-- Name: sean_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.sean ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.sean_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: subscribe; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.subscribe (
+    sid integer NOT NULL,
+    did text NOT NULL
+);
+
+
+ALTER TABLE public.subscribe OWNER TO root;
+
+--
+-- Name: token_order; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.token_order (
+    id integer NOT NULL,
+    bname character varying(16) NOT NULL,
+    tok integer NOT NULL,
+    order_id bigint NOT NULL,
+    tsum numeric NOT NULL,
+    wsum numeric NOT NULL,
+    cr_at timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL,
+    st text,
+    red_at timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL
+);
+
+
+ALTER TABLE public.token_order OWNER TO root;
+
+--
+-- Name: token_order_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.token_order ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.token_order_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: token_payout; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.token_payout (
+    id integer NOT NULL,
+    pid integer NOT NULL,
+    tom character varying(16) NOT NULL,
+    suma numeric NOT NULL,
+    cr_at timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL
+);
+
+
+ALTER TABLE public.token_payout OWNER TO root;
+
+--
+-- Name: token_payout_id_seq; Type: SEQUENCE; Schema: public; Owner: root
+--
+
+ALTER TABLE public.token_payout ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.token_payout_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: tokens; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.tokens (
+    token uuid NOT NULL,
+    token_type public.token_type_enum NOT NULL,
+    email text NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_DATE NOT NULL
+);
+
+
+ALTER TABLE public.tokens OWNER TO root;
+
+--
+-- Name: tokens_buy; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.tokens_buy (
+    us_id integer NOT NULL,
+    amount integer NOT NULL,
+    tok integer NOT NULL,
+    crat timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.tokens_buy OWNER TO root;
+
+--
+-- Name: video; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.video (
+    r_id integer NOT NULL,
+    nick character varying(16) NOT NULL,
+    src text,
+    poster text,
+    crat timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL,
+    v integer DEFAULT 0 NOT NULL
+);
+
+
+ALTER TABLE public.video OWNER TO root;
+
+--
+-- Name: vroom; Type: TABLE; Schema: public; Owner: root
+--
+
+CREATE TABLE public.vroom (
+    us_id integer NOT NULL,
+    nick character varying(16) NOT NULL,
+    src text,
+    p text,
+    descr text,
+    crat timestamp without time zone DEFAULT (now())::timestamp without time zone NOT NULL,
+    typ character varying(6) DEFAULT 'activ'::character varying NOT NULL,
+    v integer DEFAULT 1 NOT NULL
+);
+
+
+ALTER TABLE public.vroom OWNER TO root;
+
+--
+-- Data for Name: ads; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.ads (art, sub) FROM stdin;
+<div class="termins"><h1>Globikon - видеочаты для общения посредством микрофона и вебкамеры</h1>\n <p>Любой зарегистрированный пользователь может перейти в свою чат-комнату и начать видеотрансляцию для всех.</p>\n <p>Зритель, который смотрит Вашу трансляцию, может поощрить Вас чаевыми,\n то есть либо перевести на Ваш баланс любое количество токенов,\n либо напрямую на Ваш биткоин адрес отправить некоторую сумму в биткоинах анонимно.</p>\n <p>Токены - внутрисайтовая валюта Globikon, покупаемая пользователями сайта только за биткоины.</p>\n <p>1 токен стоит 0.0008 биткоинов.</p>\n <p>Токены покупаются пакетами. Минимальный пакет от 10 токенов. Не стоит отправлять биткоинов меньше чем 0.0008.\n В противном случае сумма будет считатся пожертвованием.</p>\n <p>На Globikon Вы можете, помимо видеотрансляций для всех, вести приватный чат для одного зрителя.</p>\n <p>Приватный чат на Ваше усмотрение может быть либо бесплатным, либо платным.</p>\n <p>Платный приватный чат стоит 1 токен за одну минуту.</p>\n <h3>Заработок и вывод криптовалюты</h3>\n <p>При продаже платных приватных чатов, а также при поступлении пожертвований от пользователей,\n на Ваш счет кладется 50% от суммы токенов. Вторые 50% идут на поддержку сервера видеотрансляций\n и на общую работу видеочата в целом.</p>\n <p>По достижении минимальной суммы в 100 токенов Вы получаете биткоины на свой биткоин адрес, \n который вы укажете в специальном поле прежде, чем начнете свою первую видеотрансляцию на Globikon.\n 1 токен = 0.0008 биткоинов.</p>\n <p>Если Вы проходили регистрацию на Globikon используя промокод, то\n минимальная сумма для вывода криптовалюты составляет 500 токенов.</p>\n <p>Обращаем Ваше внимание на то, что донаты от зрителей в виде биткоинов\n могут поступать на ваш биткоин адрес напрямую анонимно. Ваш биткоин адрес будет отображен для зрителей вверху и внизу чата.</p></div>	privacy
+\n<div class="termins">\n<ul><li><a href="https://chelikon.space/ru/chto-takoe-bitcoin-adres-gde-vzyat">Что такое bitcoin адрес? Где взять?</a>\n</li><li><a href="#obs">Нужно ли устанавливать OBS Studio на компьютер? / Have I to install OBS Sudio on my computer?</a>\n</li></ul>\n<p id="obs">Нет! Ни OBS Studio, ни любая другая сторонняя программа для видеотрансляций не требуется.\nТолько последняя версия браузера Google Chrome или Firefox c поддержкой webRTC.\n<br><br>No OBS Studio is required! Please use the latest version of Google Chrome browser or Firefox which the webRTC supports.\n</p>\n</div>\n\n\n	basa
+<p>Chelikon  - это сайт стримов и видеообщений по вебке. На chelikon  вы можете заработать или потратить биткоины. Поэтому здесь у вас не потребуют паспортных данных. Идеально для начинающих стримеров-моделей. Возможность получать донаты в биткоинах или токенах, которые можно будет вывести в биткоины. Нужно лишь заполнить анкету-профайл в своей личной видеочат-комнате. Не забудьте загрузить ваше фото с улыбающимся лицом на аватарку. Так будет больше шансов найти богатенького спонсора.</p>\n<p>Приватный чат может быть как платным, так и бесплатным для клиента. Это на ваше усмотрение. </p><p>Good luck!</p>\n	about
+\n\n<p><b>У вас есть продукт или услуга, которые могут быть интересны?</b></p>\n<p>1. Главный баннер(сквозной). Под шапкой сайта во всех разделах. Ротация. Размер 1024 х 127. <b>1000 рублей в месяц</b>.</p>\n\n<p>2. Баннер в подвале(сквозной). В подвале сайта во всех разделах. Размер 1024 х 853. <b>500 рублей в месяц</b>.</p>\n\n<p>Допустимые форматы баннеров: gif, jpg.<br><br>\nТакже обратите внимание на то, что в доске объявлений за 100 рублей в неделю можно закрепить текст вашего объявления в топе. С активной кликабельной ссылкой и фотографией.</p>\n\n<p>Для заказа рекламы и более подробной информацией обращаться: globalikslivov@gmail.com</p>\n\n\n\n	ads
+\.
+
+
+--
+-- Data for Name: bitaps_tmp; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.bitaps_tmp (bname, us_id, inv, pc, adr, st, crat, lm) FROM stdin;
+fdffdfd	117	invQ4rMt1HGb9hZ4fXDDAu6n8bssgH2rqnXwKzZNSNW6U3C9xTdsw	PMTu8eemSdMrvQgMwZYAhHp1RabimwPNgbawApLPz3Vwzh9KCFE4h	3Lnf9dTgefXTVk6sYHCFobjqPGEP3TMCY2	0	2021-11-20 23:05:21.406828+03	2021-11-20 23:05:21.406828+03
+\.
+
+
+--
+-- Data for Name: blog; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.blog (id, auth, title, slug, body, descr, cr_at) FROM stdin;
+1	Globi	Что такое bitcoin адрес? Где взять?	chto-takoe-bitcoin-adres-gde-vzyat	<p><a rel="nofollow" href="https://bytwork.com/articles/chto-takoe-bitkoyn-adres-pochemu-vazhen-i-kak-poluchit-btc-adres">Более подробно</a> - Bitcoin-адрес, называемый также публичным адресом - это идентификатор счета, который является уникальным и состоит из 25 - 35 латинских символов и цифр (<small>mvcwCoEnRbbtKn1P6dk4AhzkAScPpwgYWW</small>). Биткоин адрес можно сообщить пользователям, от которых вы хотите получить биткоины.\n\nПрежде, чем получить адрес, нужно создать криптокошелек.\n\nВ онлайн-сервисах для хранения крипто-монет или в кошельке.\n\nВсе, что вам понадобится для открытия крипто кошелька - это просто пройти процесс регистрации на сайте.\n\nКрипто кошельки: Jaxx, Bitcoin Core, Electrum, Exodus, bitpay и многие другие.\nВы можете найти полный список мобильных кошельков здесь:\n<a href="https://bitcoin.org/en/wallets/mobile/android/">https://bitcoin.org/en/wallets/mobile/android/</a></p>	криптокошелек и где взять биткоин адрес?	2020-09-22 08:54:06.336681
+2	Globi	Вебкам модель для молодежи - от 1000 биткоинов в месяц!	vebkam-model-dlya-molodezhi-ot-1000-bitkoinov-v-mesyac	<p>\nУстали просить у родителей деньги? \nМечтаете найти богатого спонсора?\nХотите начать зарабатывать от 1000 биткоинов в месяц?\n</p>\n<p>\nТогда <strong>Chelikon</strong> это то, что вам нужно.\n<strong>Chelikon</strong> - сайт видеочатов для общения и знакомств.\nСразу после простой регистрации вы имеете возможность начать свою видеотрансляцию на широкую аудиторию.\nНа <strong>Chelikon</strong> не попросят у вас паспорт ради подтверждения возраста совершеннолетия,\nпотому что все расчеты с моделями и мемберами ведутся исключительно в биткоинах.\nВам нужно будет только завести свой криптокошелек для биткоинов и\nуказать свой биткоин адрес в специальном поле вашей чат-комнаты.\nШансы быстро найти богатого друга сильно возрастут, если вы заполните небольшую анкету и\nзагрузите свой аватар прежде, чем начнете стрим.\n\n</p><h2>Заработок на видеотрансляциях</h2>\n<p>\nВо время прямой трансляции вы будете получать от зрителей токены (внутрисайтовая валюта).\nИли же анонимные донаты в биткоинах прямо на ваш криптокошелек.\nТокены обмениваются на биткоины. Минимальный вывод от 0.04 биткоинов.\nТакже вы можете заработать токены и на приватных чатах для одного зрителя.\nСтоимость приват чата - 1 минута = 1 токен.\nВпрочем, у вас будет выбор: сделать приват платным или бесплатным для заказчика привата.\nЕсли вы зарегистрируетесь на сайте с промокодом 9999, то на ваш счет(баланс) поступит бонус в 50 токенов.\n</p>\n<p>\nДля видеотрансляции вам не понадобится устанавливать сторонние программы.\nДостаточно иметь ПК или телефон с вебкамерой,\nбраузер Google Chrome или Firefox последних версий. А также скоростной интернет.\n</p>\n<p>\nПриглашайте на видеотрансляцию своих фрэндов из ВК. Наверняка среди них найдется тот, кто заценит вашу красоту в биткоинах\nи токенах.\nПроходите регистрацию и начинайте зарабатывать удаленно от 1000 биткоинов уже сейчас!\n<a href="/signup">Ссылка</a> на регистрацию. Промокод 9999.\n</p>\n	Заработок удаленно. Вебкам для молодежи от 1000 биткоинов в месяц. Сайт видеостримов. Общение и знакомства. Поиск богатого спонсора. Платный приват.	2021-07-10 19:36:30.249788
+\.
+
+
+--
+-- Data for Name: buser; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.buser (id, pwd, bname, email, items, proz, model, brole, crat, ll, ava, stat, lng, promo, cadr, bage, sexor) FROM stdin;
+9	Vasya123	Vasya123	miyaw74953@iazhy.com	0	50	f	non	2020-10-24 09:21:32.18652	2020-10-24 09:21:32.18652	\N	\N	ru	0	\N	18	hetero
+10	hjkl1983	lee783	lee783@mail.ru	0	50	f	non	2020-10-25 10:04:02.063913	2020-10-25 10:04:02.063913	\N	\N	ru	0	\N	18	hetero
+11	ulli0707	Mario0707	hallojungs@gmail.com	0	50	f	non	2020-10-26 15:22:00.946482	2020-10-26 15:22:00.946482	\N	\N	ru	0	\N	18	hetero
+12	shooyer07	Bill76	maconguy7630@yahoo.com	0	50	f	non	2020-10-28 18:39:33.187966	2020-10-28 18:39:33.187966	\N	\N	ru	0	\N	18	hetero
+13	Mama1234$	Alex1234a	oon76887@gmail.com	0	50	f	non	2020-10-30 12:18:15.27736	2020-10-30 12:18:15.27736	\N	\N	ru	0	\N	18	hetero
+46	plmoknijbbnm	it'sden	tungusen@gmail.com	0	50	f	non	2020-12-06 01:46:18.625953	2020-12-06 01:46:18.625953	\N	\N	ru	0	\N	18	hetero
+14	12345678	Дима	ndavron70@gmail.com	0	50	f	non	2020-11-04 00:50:07.267835	2020-11-04 00:50:07.267835	\N	\N	ru	0	\N	18	hetero
+15	Fna-j8z-8wL-ed	matrixxxstonee	piero.sop@yandex.ru	0	50	f	non	2020-11-05 02:11:37.093718	2020-11-05 02:11:37.093718	\N	\N	ru	0	\N	18	hetero
+16	sonaj2013	Karal	kapral9797@bk.ru	0	50	f	non	2020-11-06 10:20:27.882285	2020-11-06 10:20:27.882285	\N	\N	ru	0	\N	18	hetero
+61	oklick1231	Хейтер	Mistral94@mail.ru	0	50	f	non	2020-12-23 20:42:43.61141	2020-12-23 20:42:43.61141	\N	В приватке,  покажу больше) присылайте деньги,  я вас пригашу	ru	0	\N	18	hetero
+18	15241524w	Ali	mazn_bbb@yahoo.com	0	50	f	non	2020-11-09 22:23:12.032238	2020-11-09 22:23:12.032238	\N	\N	ru	0	\N	18	hetero
+19	gv20049898	gustavoviere	gustavoviere@gmail.com	0	50	f	non	2020-11-09 22:44:07.203365	2020-11-09 22:44:07.203365	\N	\N	ru	0	\N	18	hetero
+36	Feketezokni	Стивен	06702119700@freemail.hu	0	50	f	non	2020-11-28 13:10:12.921705	2020-11-28 13:10:12.921705	\N	Im gay	ru	0	\N	18	hetero
+47	wolf1985	Qwolf	keshayouth@gmail.com	0	50	f	non	2020-12-06 06:41:23.425991	2020-12-06 06:41:23.425991	\N	\N	ru	0	\N	18	hetero
+21	iceman2020	dundun231	ddum5286@gmail.com	0	50	f	non	2020-11-11 17:31:12.517853	2020-11-11 17:31:12.517853	\N	\N	ru	0	\N	18	hetero
+48	884jo1	fre	27jeanyves@orange.fr	0	50	f	non	2020-12-06 15:24:24.91278	2020-12-06 15:24:24.91278		\N	ru	0	\N	18	hetero
+5	stalker200	greshoy	denisigorevic55@mail.com	0	50	f	non	2020-09-22 18:05:01.578763	2020-09-22 18:05:01.578763	\N	\N	ru	0	\N	18	hetero
+49	jCgEUF3wEgShfhR	Pedoperv	smithbloggs87@gmail.com	0	50	f	non	2020-12-06 15:41:54.167405	2020-12-06 15:41:54.167405	\N	\N	ru	0	\N	18	hetero
+66	cfkfdfn.kftd070883	Fdfgfd	Alek693@yandex.com	0	50	f	non	2021-01-03 07:11:08.980062	2021-01-03 07:11:08.980062	\N	\N	ru	0	\N	18	hetero
+50	carefree	Sojourn1	gatekeep1@protonmail.com	0	50	f	non	2020-12-06 21:39:00.93257	2020-12-06 21:39:00.93257	\N	\N	ru	0	\N	18	hetero
+22	1976idioma	alex	sokol12.76@mail.ru	0	50	f	non	2020-11-14 16:41:32.139066	2020-11-14 16:41:32.139066	\N	\N	ru	0	\N	18	hetero
+23	kingzombie123	Den	veneverf@gmail.com	0	50	f	non	2020-11-15 12:02:55.850326	2020-11-15 12:02:55.850326	\N	\N	ru	0	\N	18	hetero
+24	Locario9090	Nicko	nicko15@hotmail.com	0	50	f	non	2020-11-15 15:43:50.162815	2020-11-15 15:43:50.162815	\N	\N	ru	0	\N	18	hetero
+25	Locario9090	Nikolas	nicko@hotmail.com	0	50	f	non	2020-11-15 15:55:46.518824	2020-11-15 15:55:46.518824	\N	\N	ru	0	\N	18	hetero
+38	zavalu6787	Arik	manifix24@gmail.com	0	50	f	non	2020-12-01 05:33:58.027113	2020-12-01 05:33:58.027113	\N	\N	ru	0	\N	18	hetero
+62	Logitecch1992	Lopie	AlbisCarlos481@gmail.com	0	50	f	non	2020-12-26 03:40:16.973242	2020-12-26 03:40:16.973242	\N	\N	ru	0	\N	18	hetero
+27	as10101995	Пухлый 	Bazunovila560@gmail.com	0	50	f	non	2020-11-23 09:01:42.048729	2020-11-23 09:01:42.048729	\N	\N	ru	0	\N	18	hetero
+7	Slavatanypoly1	Bilisimo	shinaveny@gmail.com	0	50	f	non	2020-09-30 07:53:58.019056	2020-09-30 21:29:52.744505	\N	\N	ru	0	\N	18	hetero
+8	wgCXb9QFSZtift3	mil_kiss_444	nnelix002@gmail.com	0	50	f	non	2020-10-07 19:38:30.889437	2020-10-07 19:38:30.889437	\N	\N	ru	0	\N	18	hetero
+28	109wol109	1rol2	haehnerrolf@live.de	0	50	f	non	2020-11-23 17:06:39.405198	2020-11-23 17:11:07.474369	\N	\N	ru	0	\N	18	hetero
+39	0072962	Dimas	super-dimasik@bk.ru	0	50	f	non	2020-12-01 18:02:50.059354	2020-12-01 18:02:50.059354	\N	\N	ru	0	\N	18	hetero
+29	aa1984	Aleks84	aleksejseregin801@gmail.com	0	50	f	non	2020-11-25 09:33:35.206551	2020-11-25 09:33:35.206551		\N	ru	0	\N	18	hetero
+40	123qwe45	Carasik	evgentu779@gmail.com	0	50	f	non	2020-12-02 17:51:30.08303	2020-12-02 17:51:30.08303	\N	Love	ru	0	\N	18	hetero
+30	bebebrayan01052020	brayan	bebebrayan@protonmail.com	0	50	f	non	2020-11-27 08:02:09.724897	2020-11-27 08:02:09.724897	\N	probando 	ru	0	\N	18	hetero
+51	24766129	Huey	hueyluey40@gmail.com	0	50	f	non	2020-12-08 16:09:08.711504	2020-12-08 16:09:08.711504	\N	Gay	ru	0	\N	18	hetero
+41	wfh.yt,tcysq	Ben	oceanislan@mail.ru	0	50	f	non	2020-12-04 03:01:34.729215	2020-12-04 03:01:34.729215	\N	\N	ru	0	\N	18	hetero
+42	775774500	nashwen	nashwennn1234567@gmail.com	0	50	f	non	2020-12-04 17:12:10.19578	2020-12-04 17:12:10.19578	\N	\N	ru	0	\N	18	hetero
+43	ira20-15lina	Dmi3y 	saratovdennis@gmail.com	0	50	f	non	2020-12-05 08:29:03.488753	2020-12-05 08:29:03.488753	\N	\N	ru	0	\N	18	hetero
+44	matilda2020	sammy	moskito66cc@gmail.com	0	50	f	non	2020-12-05 10:30:26.462805	2020-12-05 10:30:26.462805	\N	\N	ru	0	\N	18	hetero
+45	0565544	Zaza	Roman.w7@mail.ru	0	50	f	non	2020-12-05 11:16:20.167606	2020-12-05 11:16:20.167606	\N	\N	ru	0	\N	18	hetero
+56	12345678901	Sievtd	5.aaron.7ac@gmail.com	0	50	f	non	2020-12-14 05:20:33.525919	2020-12-14 05:20:33.525919	\N	\N	ru	0	\N	18	hetero
+53	Y3MiaYBQSXKfGZv	Pedoperv2020	boymegalinks@yahoo.com	0	50	f	non	2020-12-09 14:13:47.612587	2020-12-10 08:25:03.048201	\N	Wanna make.some CP..	ru	0	\N	18	hetero
+54	mmcdonagh#@#1978	Martin 	mmcdonagh1978@gmail.com	0	50	f	non	2020-12-11 10:00:59.759115	2020-12-11 10:00:59.759115	\N	\N	ru	0	\N	18	hetero
+6	1234	dima	d@ya.ru	67	50	f	non	2020-09-23 18:23:37.628115	2020-12-26 17:05:23.973921	\N	\N	ru	0	\N	18	hetero
+63	sany20939	Sany	sany.omsk24@gmail.com	0	50	f	non	2020-12-26 17:07:56.894518	2020-12-26 17:07:56.894518	\N	\N	ru	0	\N	18	hetero
+64	T@$m@n@88	benji	benjiboyz1@protonmail.com	0	50	f	non	2020-12-31 04:41:42.237993	2020-12-31 04:41:42.237993	\N	\N	ru	0	\N	18	hetero
+58	1234	vas	vas@ya.ru	0	50	f	fake	2020-12-18 23:43:29.833647	2020-12-18 23:43:29.833647		i'm dancing : )	ru	0	\N	18	hetero
+55	xoqsaw-9Nefki-nottoc	Sarsary	qamhmad331@gmail.com	0	50	f	non	2020-12-13 22:40:22.535992	2020-12-13 22:40:22.535992	\N	\N	ru	0	\N	18	hetero
+59	1234	vanya1	vanya1@ya.ru	0	50	f	fake	2020-12-18 23:45:04.610029	2020-12-18 23:45:04.610029		\N	ru	0	\N	18	hetero
+65	Avatar1969	CalNinja	calninja2012@outlook.com	0	50	f	non	2021-01-02 10:03:09.294508	2021-01-02 10:03:09.294508	\N	\N	ru	0	\N	18	hetero
+37	2986602ps	Kay	pleshkov.sergej.88@mail.ru	0	50	f	non	2020-11-29 07:14:26.749001	2020-11-29 07:14:26.749001		\N	ru	0	\N	18	hetero
+75	bab1505407	ank	A-ndre-w@mail.ru	0	50	f	non	2021-01-24 08:16:28.977777	2021-01-24 08:16:28.977777	\N	\N	ru	0	\N	18	hetero
+76	babe1965	Marty	peter196768@gmail.com	0	50	f	non	2021-01-26 11:09:03.001787	2021-01-26 11:09:03.001787	\N	\N	ru	0	\N	18	hetero
+77	140679vovan	Viktor 	vovanchik14067940@gmail.com	0	50	f	non	2021-01-27 22:13:23.002399	2021-01-27 22:13:23.002399	\N	\N	ru	0	\N	18	hetero
+78	qazwsxedcrfv	Pisser777	Pisser777@hotmail.es	0	50	f	non	2021-02-05 13:00:41.314364	2021-02-05 14:02:52.517138	\N	\N	ru	0	\N	18	hetero
+57	1234	slava	slava@ya.ru	0	50	f	fake	2020-12-18 23:40:27.534951	2021-12-24 23:49:49.412204		жопное пение	ru	0	\N	18	hetero
+80	123456	zxzx	tag@jsdjs.com	0	50	f	non	2021-02-18 17:56:37.879193	2021-02-18 17:56:37.879193	\N	\N	ru	0	\N	18	hetero
+26	ncc1701	liltanner	burger.shelly@yahoo.com	0	50	f	non	2020-11-21 22:54:50.007607	2021-05-25 02:41:23.506824	\N	\N	ru	0	\N	18	hetero
+81	11GcsF07	dannncis	fronsac_kvothe@mail.com	0	50	f	non	2021-03-05 22:21:05.995587	2021-03-05 22:21:05.995587	\N	\N	ru	0	\N	18	hetero
+79	samsung282021	BOYS 18	pbarkunov@yandex.ru	2	50	f	non	2021-02-11 07:09:42.411288	2021-03-15 15:04:41.440394	/profile/BOYS 18_Hky6Yl6Qu.jpg	Илья. Плохого гея ильёй не назовут	ru	0	\N	18	hetero
+84	1234	Kola	globalikslivov@gmail.com	0	50	f	non	2021-03-23 23:03:02.719781	2021-03-23 23:03:02.719781	\N	\N	ru	0	\N	18	hetero
+85	123456	dotnet	tabkala@yahoo.com	0	50	f	non	2021-03-24 16:48:59.229255	2021-03-24 16:48:59.229255	\N	\N	en	0	\N	18	hetero
+87	36170585	Jon	jamilicvs000@gmail.com	0	50	f	non	2021-03-25 14:58:58.996716	2021-03-25 14:58:58.996716	\N	\N	en	0	\N	18	hetero
+86	dj1966ditolga	Bingo	lidogido66@gmail.com	0	50	f	non	2021-03-24 21:35:00.135718	2021-04-02 22:15:45.994855	\N	\N	en	0	\N	18	hetero
+89	zvezda78	Vlad2162	vasdmit@rambler.ru	0	50	f	non	2021-04-29 02:48:34.209762	2021-04-29 02:48:34.209762	\N	\N	ru	0	\N	18	hetero
+90	Tardis777@	Pic7	picnicboy777@yahoo.co.uk	0	50	f	non	2021-06-04 04:12:44.384929	2021-06-04 04:12:44.384929	\N	\N	en	0	\N	18	hetero
+91	sss	sss	sss@sss.ru	0	50	f	non	2021-06-07 10:34:26.900678	2021-06-07 10:37:19.182824	\N	\N	ru	0	\N	18	hetero
+92	Pidorok1488	Pidorok	nnm@mail.ru	0	50	f	non	2021-06-21 20:25:52.626822	2021-06-21 20:25:52.626822	\N	\N	ru	0	\N	18	hetero
+93	x6suf232	Noah	luisluisinho@gmail.com	0	50	f	non	2021-06-24 07:51:32.422355	2021-06-24 07:51:32.422355	\N	\N	en	0	\N	18	hetero
+74	w33aph3b39	flamingo	flamingo3b@protonmail.com	0	50	f	non	2021-01-04 19:36:37.44369	2021-07-01 18:22:01.67031	\N	\N	ru	0	\N	18	hetero
+94	081122	Tristan30	pierrutristan30620@gmail.com	0	50	f	non	2021-07-14 12:16:52.823252	2021-07-14 12:16:52.823252		11yo	en	0	\N	18	hetero
+112	Amirchik	Amirchik	kayumovo@inbox.ru	50	50	f	non	2021-11-20 05:15:56.961335	2021-11-20 05:15:56.961335	\N	\N	ru	1	\N	18	hetero
+95	robika65	robert sarik	sarikrob@azet.sk	0	50	f	non	2021-11-19 19:12:04.939085	2021-11-19 19:12:04.939085	\N	\N	en	0	\N	18	hetero
+97	7333312092	Neder	nedermohmed@gmail.com	0	50	f	non	2021-11-19 20:53:31.299544	2021-11-19 20:53:31.299544	\N	\N	en	0	\N	18	hetero
+98	1234	christian	christian@ya.ru	0	50	f	fake	2021-11-19 21:46:28.760873	2021-11-19 21:46:28.760873	\N	bamos a la playa	ru	0	\N	18	hetero
+99	1234	teplo	teplo@ya.ru	0	50	f	fake	2021-11-19 21:50:36.678451	2021-11-19 21:50:36.678451	\N	\N	ru	0	\N	18	hetero
+100	1234	elisej	elisej@ya.ru	0	50	f	fake	2021-11-19 21:58:09.56041	2021-11-19 21:58:09.56041	\N	wanna bitcoins	ru	0	\N	18	hetero
+101	1234	alka	alka@ya.ru	0	50	f	fake	2021-11-19 22:55:01.3913	2021-11-19 22:55:01.3913	\N	i'm fucking nice	ru	0	\N	18	hetero
+102	1234	galo	galo@ya.ru	0	50	f	fake	2021-11-19 23:02:04.888457	2021-11-19 23:02:04.888457	\N	wanna 100 tokens	ru	0	\N	18	hetero
+103	1234	lex	lex@ya.ru	0	50	f	fake	2021-11-19 23:04:06.89169	2021-11-19 23:04:06.89169	\N	i'm slave	ru	0	\N	18	hetero
+104	1234	misha	misha@ya.ru	0	50	f	fake	2021-11-19 23:07:25.554695	2021-11-19 23:07:25.554695	\N	oh, fuck	ru	0	\N	18	hetero
+105	1234	oleg	oleg@ya.ru	0	50	f	fake	2021-11-19 23:09:13.939434	2021-11-19 23:09:13.939434	\N	suka	ru	0	\N	18	hetero
+106	1234	robi	robi@ya.ru	0	50	f	fake	2021-11-19 23:10:39.080045	2021-11-19 23:10:39.080045	\N	fucking 10 bitcoins	ru	0	\N	18	hetero
+107	1234	vitia	vitia@ya.ru	0	50	f	fake	2021-11-19 23:12:15.941184	2021-11-19 23:12:15.941184	\N	what the fuck?	ru	0	\N	18	hetero
+113	505050	all25	alex2310bb1989@gmail.com	0	50	f	non	2021-11-20 07:57:58.573175	2021-11-20 07:57:58.573175	\N	\N	ru	0	\N	18	hetero
+108	shuaibfraz1234567	Shuaib Fraz	game4fraz@gmail.com	0	50	f	non	2021-11-19 23:25:32.379725	2021-11-19 23:25:32.379725	\N	I'm single. 	en	0	\N	18	bi
+109	pelangi08	Achiltoz	achiltoz@gmail.com	0	50	f	non	2021-11-20 00:34:18.03253	2021-11-20 00:34:18.03253	\N	\N	en	0	\N	18	hetero
+117	aymen4070	fdffdfd	aymen.chouaieb5@gmail.com	50	50	f	non	2021-11-20 23:04:04.372424	2021-11-20 23:04:04.372424	\N	\N	en	1	\N	18	hetero
+114	azsllop9834	Pavel green	cleanweapons@mail.ru	50	50	f	non	2021-11-20 09:29:14.475866	2021-11-20 09:29:14.475866	\N	Хей	ru	1	\N	16	hetero
+115	27031994cerjik	Cerega	ceregaivanov27031994@gmail.com	0	50	f	non	2021-11-20 15:04:04.360773	2021-11-20 15:04:04.360773	\N	\N	ru	0	\N	18	hetero
+110	vladkolomiec21	Nikita-2021	vladkolomiec21@gmail.com	50	50	f	non	2021-11-20 00:52:40.361779	2021-11-20 00:52:40.361779	\N	\N	en	1	\N	18	hetero
+118	зфы88888888	dsfhdkshfj765	yakidak743@ineedsa.com	0	50	f	non	2021-11-20 23:07:21.711576	2021-11-20 23:07:21.711576	\N	\N	ru	0	\N	18	hetero
+129	5891270bN	trkgml	trkgml1@gmail.com	0	50	f	non	2021-11-27 13:04:57.69457	2021-11-27 13:04:57.69457	\N	\N	en	0	\N	18	hetero
+125	Koza1234	Карел	hanapetr@seznam.cz	0	50	f	non	2021-11-23 01:29:15.501699	2021-11-23 01:29:15.501699	\N	\N	en	0	\N	18	hetero
+119	888999zzz	Лидер	sergejsemenicenko82@gmail.com	50	50	f	non	2021-11-21 00:22:17.511536	2021-11-21 00:22:17.511536	\N	Дрочить 	ru	1	\N	19	bi
+120	0930239236mama	Арчи	frusa2634@gmail.com	50	50	f	non	2021-11-21 09:05:49.047665	2021-11-21 09:05:49.047665	\N	\N	ru	1	\N	18	hetero
+121	azer345	Alex45	kasatkievasa@gmail.com	50	50	f	non	2021-11-21 16:32:50.814801	2021-11-21 16:32:50.814801	\N	\N	ru	1	\N	18	hetero
+116	27031994cerjik	Серёжа	seregaivanov27031994@gmail.com	40	50	f	non	2021-11-20 15:16:26.074418	2021-11-20 15:16:26.074418	\N	\N	ru	1	\N	18	hetero
+122	nord23	Nord	yaun.petrov99@internet.ru	0	50	f	non	2021-11-21 20:34:24.714637	2021-11-21 20:34:24.714637	\N	\N	ru	0	\N	18	hetero
+111	19811978Dd	edufbni	ed.suh.ufa@gmail.com	50	50	f	non	2021-11-20 04:53:43.670559	2021-11-21 20:38:13.83476	\N	\N	ru	1	\N	18	hetero
+123	Moy250parol	Sergoi	www.vovhdjhd655@mail.ru	0	50	f	non	2021-11-21 23:11:29.345543	2021-11-21 23:11:29.345543	\N	\N	ru	0	\N	18	hetero
+60	1234	mickey	mickey@ya.ru	10	50	f	fake	2020-12-18 23:46:16.642126	2020-12-19 15:44:06.478491		tighty whities	ru	0	\N	18	hetero
+96	karlik123	samotar3211	samotar3211@email.cz	0	50	f	non	2021-11-19 19:27:02.277895	2021-11-20 17:18:22.416456	\N	\N	en	0	\N	18	hetero
+128	79987998	 Blok	dakota5@centrum.cz	50	50	f	non	2021-11-25 08:57:41.27728	2021-11-25 08:57:41.27728	\N	\N	ru	1	\N	18	hetero
+124	222chelik333	Chelik666	sencey111@gmail.com	0	50	f	non	2021-11-22 01:08:03.743085	2021-11-22 01:08:03.743085	\N	\N	en	0	\N	18	hetero
+126	Loup88,;:!	BENOI	benoit7788@protonmail.com	0	50	f	non	2021-11-23 20:21:36.963628	2021-11-23 20:21:36.963628	\N	\N	en	0	\N	18	hetero
+127	balabah1976	Александр	aleksfartov3@gmail.com	0	50	f	non	2021-11-24 07:24:47.887922	2021-11-24 07:31:05.502962	\N	\N	en	0	\N	18	hetero
+131	123456	parsdotnet	asasa@qqq.com	0	50	f	non	2021-11-27 17:42:57.616848	2021-12-17 10:41:21.892135	\N	\N	en	0	\N	18	hetero
+1	1234	Globi	gru5@yandex.ru	0	50	f	superadmin	2020-09-19 06:24:41.434264	2022-01-07 19:16:00.608346	/profile/Globi_rJhoc9S_K.jpg	I'm looking for a good time	ru	0	1H2k4KVqXba7a7dZwXmhS8rr1soAEdi1Xy	45	hetero
+137	climbatica	Nikitos	nikitosthe@yandex.ru	50	50	f	non	2021-11-28 23:53:13.142429	2021-11-28 23:53:13.142429	\N	\N	ru	1	\N	18	hetero
+130	19751411G	McTolmay 	mcpetertolmay@gmail.com	0	50	f	non	2021-11-27 17:11:33.410786	2021-11-30 03:06:10.087973	\N	If you want to know something just ask me   Если хочешь что-то узнать, просто спроси меня	en	0	\N	45	gay
+138	zahem82	Def115	liakh.and@yandex.ru	0	50	f	non	2021-11-30 09:24:18.503108	2021-11-30 09:24:18.503108	\N	\N	ru	0	\N	18	hetero
+139	gusteknis	Mikuci	rsaulis315@gmail.com	0	50	f	non	2021-11-30 16:32:58.719324	2021-11-30 16:32:58.719324	\N	Meklēju	ru	0	\N	18	hetero
+140	jv341985	Nale	jv5843@yahoo.com	0	50	f	non	2021-12-01 08:56:11.720886	2021-12-01 08:56:11.720886	\N	\N	en	0	\N	18	hetero
+141	dogface	Jimboy	jimboy009@gmail.com	0	50	f	non	2021-12-02 01:05:19.451207	2021-12-02 01:05:19.451207	\N	\N	en	0	\N	18	gay
+142	Padda2017	Desiper	vkannan157@gmail.com	0	50	f	non	2021-12-02 01:38:47.229962	2021-12-02 01:38:47.229962	\N	\N	en	0	\N	18	hetero
+143	159357	Kipon	vazelin199715@yandex.ru	0	50	f	non	2021-12-02 12:40:25.821446	2021-12-02 12:40:25.821446	\N	\N	ru	0	\N	18	hetero
+144	mh1926542654	Bittu	bittujivan1@gmail.com	0	50	f	non	2021-12-05 15:42:41.645867	2021-12-05 15:42:41.645867	\N	\N	en	0	\N	18	hetero
+145	12345	хуй	alichooy@gmail.com	0	50	f	non	2021-12-06 16:44:36.151613	2021-12-06 16:44:53.574598	\N	\N	en	0	\N	18	hetero
+146	asdalwajh99	ragi 	ragi-99@hotmail.com	0	50	f	non	2021-12-10 16:50:23.18158	2021-12-10 16:50:23.18158	\N	\N	en	0	\N	18	hetero
+149	Mike2005$	Sexyjoe	joe02.green02@gmail.com	0	50	f	non	2021-12-19 15:50:47.80177	2021-12-19 15:54:29.413143	\N	\N	en	0	\N	18	hetero
+150	ghj123	Ass hole man	sergserov903@gmail.com	0	50	f	non	2021-12-29 21:07:56.648071	2021-12-29 21:07:56.648071	\N	\N	ru	0	\N	18	hetero
+\.
+
+
+--
+-- Data for Name: chat; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.chat (msg, tz, us_id, nick) FROM stdin;
+hello world!	2021-11-30 19:41:56.23002+03	-1	ByxV40mtt
+Grund	2021-11-30 19:51:26.924489+03	-1	Globi
+Hello	2021-12-02 00:32:02.462156+03	-1	Globi
+I'm here	2021-12-02 00:32:43.579725+03	-1	Globi
+\.
+
+
+--
+-- Data for Name: cladr; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.cladr (id, nick, cadr, padr, cadrtest, padrtest, inv, pc, btc_amt, btc_all) FROM stdin;
+1	Globi	1PJsmJzFgkAVWwqPvcEHvYELcCcvsFgACo	33TguZd5d9w1V4MtG7S5qYkx1BkkVSxoxn	\N	\N	invPpok1xHZ6UVdAgXVxLyKsh3wn25QHogZy5yauDnG8XEzdk52b5	PMTvSSWyohqfbxuPeLZHiUNpoWa8yz4nzx5bodAgdMaopP25VrNJq	0	0
+\.
+
+
+--
+-- Data for Name: obi; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.obi (id, ati, bnick, msg, isg) FROM stdin;
+2	2020-09-22 19:42:59.782361+03	Дмитрий	Всем привет! Отличного настроения и прекрасного либидо. Я Дмитрий, 30.178.105.17&#x2F;6 универсал. Любителям пышных форм, нескучный собеседник, умеющий выслушать и хорошим чувством юмора, индивидуальным подходом в постели. Приглашаю к себе, ориентировочно метро Октябрьская. Предложение для души и тела: массаж-эро; секс: анал, орал; римминг, поцелуи, ласки, петтинг, а так же ролевые игры: Я, Вы-женщина, игрушки имеются. Личная гигиена превыше всего - полотенце, тапочки, масла, душ. Почувствуй «Рай» со мной, главное будь самим собой. Все индивидуально и конфеденциально. Встречи со мной: от 5000, ночь от 10000, ваше сопровождение по России и за границей за ваш баланс. Также присутствует Вирт Whatsapp от 500. Уважаемые ценители, пишем и звоним, в любое время суток. Мой номер: +79057235383 Whatsapp или почта dosug2020@bk.ru.	0
+3	2020-09-28 21:51:04.770835+03	Romchi	Нация не важна главное нормальный человек!пассив ласкаю тело делаю минетик могу у вас в машине вагончике ...не коммерция! красногвардейский район не против регулярно встречаться!район любой 89046381588	0
+5	2020-11-06 07:26:48.339938+03	Vlad	Познакомлюсь с активным мужиком, не полным,от 42 лет, с волосатой грудью и маленьким до 15 см членом, для дружбы, отношений, разовые встречи не интересуют. 	0
+7	2020-11-08 15:55:17.145842+03	Макс	Ищу молодого с местом, сделаю что захочешь, если припудрите носик) сам 18 лет 200&#x2F;65&#x2F;18\nМетро международная\nWhatsApp 89117929829\nTelegram @xomka	0
+9	2020-11-14 17:59:05.328209+03	алекс	всем доброго приятного вечера.познакомлюсь с уни для взаимных ласк оральных.можно и больше.мне 39&#x2F;184&#x2F;82 18.пиши 89817196911	0
+10	2020-11-22 15:51:42.02342+03	Max	Приглашу здорового, чистоплотного активного или уни парня с толстым членом. Место на Парнасе, при взаимном желании возможны постоянные встречи. би 180&#x2F;95&#x2F;39 17*4 уни.в телеге: @MaxYasnny\n	0
+11	2020-11-29 10:17:46.433747+03	Kay	Ищу друга без обязательств.<br><a class="aprofi" href="/webrtc/37">Мой профайл</a>	0
+12	2020-11-30 19:17:15.195984+03	ElenaHox	Предлагаю Вам достойный заработок на платформе «МЁД» \r\n \r\nИ автоматизируйте Ваш доход на сервисе «ИНФОКУБ» \r\n \r\nНаша платформа «МЁД», содержит уже все материалы для Вашего дохода. \r\n \r\nПрисоединяйтесь и давайте зарабатывать вместе, получите уже сейчас: \r\n \r\n- Доступ к закрытой группе в ВК \r\n- Доступ к сервису ИнфоКуб \r\n- Поддержка в ВК и по почте \r\n- Добавление в командный чат \r\n \r\nОзнакомтесь с условиями у нас на сервисе: https://v.ht/miyod \r\n \r\nПрисоединяйтесь!	0
+13	2020-11-30 23:00:46.977221+03	OlegHox	Умеете копировать текст? Сможете нажать на кнопку «загрузить» и «отправить»? \r\nТогда у вас всё получится! Получится зарабатывать по системе «Родник \r\n \r\nПосле настройки система работает сама около месяца. Вы день тратите на настройку, а потом получаете доход весь месяц. \r\nВсе материалы готовы и ждут вас. Вам нужно только скопировать их на сервис и запустить. Делать самому их уже не нужно! \r\nЯ сделал специальный сервис,который поможет вам зарабатывать. Доступ к нему будет только у моих учеников. \r\n \r\nА ПОЛУЧИТЬСЯ ЛИ? ПОЛУЧИТСЯ! И ВОТ ПОЧЕМУ: \r\n \r\n1. Созданная мною платформа ЛидоСфера существенно облегчает работу! \r\n2. За вас все уже сделано. Всё готово и осталось только загрузить \r\n3. Чтобы скопировать информацию, необходим самый минимум знаний \r\n4. Автоматический заработок это тот, который не нужно постоянно настраивать \r\n5. Тех. поддержка всегда на связи, если возникнут трудности. \r\n \r\nБолее подробная информация у нас на сайте: https://v.ht/rodnik \r\n \r\nСистема «РОДНИК» 5 000 в день на автозаработке.	0
+15	2020-12-01 08:36:54.371547+03	Эрик	Я не манерный, не полный,из Санкт-Петербурга, ищу парня, не матерного, пишите +79932191157	0
+16	2020-12-09 19:30:38.881075+03	олег	уни в тосно 89819705859	0
+17	2020-12-14 13:39:11.529108+03	Даниил	Уни акт ,23 года.176.78.16.Ищу худого пассика ,или транса с местом или на авто https:&#x2F;&#x2F;vk.com&#x2F;jackson42	0
+19	2021-03-25 00:36:39.624752+03	Bingo	اريد النظام ل موقع لراءع<br><a class="aprofi" href="/webrtc/86">My profile</a>	0
+20	2021-04-03 05:22:47.731569+03	Иван Дорн	Курсы вокала с предыханием. Дорого. Бесполезно.\n899912312312	0
+24	2021-11-27 17:53:24.853147+03	McTolmay 	I&#x27;m looking for younger guys for chat friend look not touch what ever you like tell me \n\nЯ ищу парней помоложе для чата, друг, смотри, не трогай, что тебе нравится, скажи мне<br><a class="aprofi" href="/webrtc/130">My profile</a>	0
+\.
+
+
+--
+-- Data for Name: prim_adr; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.prim_adr (adr, type, xir, tadr, ya_sec, xir_sec) FROM stdin;
+1H2k4KVqXba7a7dZwXmhS8rr1soAEdi1Xy	f	{"urls": ["stun:eu-turn6.xirsys.com", "turn:eu-turn6.xirsys.com:80?transport=udp", "turn:eu-turn6.xirsys.com:3478?transport=udp", "turn:eu-turn6.xirsys.com:80?transport=tcp", "turn:eu-turn6.xirsys.com:3478?transport=tcp", "turns:eu-turn6.xirsys.com:443?transport=tcp", "turns:eu-turn6.xirsys.com:5349?transport=tcp"], "username": "Lf5NKOUDhfZYga-Nx4ZILSBCtv-k4L8uCHBoue8ZV9WiuWHULehKGqwNCJKSy6XbAAAAAF_FKfpHbG9iaQ==", "credential": "6941122a-3330-11eb-b324-0242ac140004"}	mqwRsYbYjU19m3SP89dREEBkoNUAetf1FK	1nLUJ6jpPEf+JGSJDWMNFep4	867f06f6-1065-11ea-a46b-0242ac110003
+\.
+
+
+--
+-- Data for Name: reklama; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.reklama (id, src, href, anf, ed, nick, statu, meta, typ, price, cr_at, cl) FROM stdin;
+2	b3.jpg	https://yandex.ru	2021-06-01	2021-06-30	pidor	2	mmkmkmkm	2	67	2021-06-24 15:33:28.726798	1
+1	a2.jpg	https://yandex.ru	2021-06-02	2021-07-09	suka	2	mkmmkmkmmkmkk mkmkmkm	1	9	2021-06-24 15:31:46.691925	3
+\.
+
+
+--
+-- Data for Name: sean; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.sean (id, sname, typ, crat, endat) FROM stdin;
+1	Tristan30	0	2021-07-14 12:20:28.004174	2021-07-14 12:21:04.984345
+2	Tristan30	0	2021-07-14 12:24:31.307121	2021-07-14 12:26:15.80818
+3	Globi	0	2021-11-20 00:46:33.516648	2021-11-20 00:49:30.708597
+4	Globi	0	2021-11-20 01:27:08.195903	2021-11-20 01:38:20.429934
+5	Globi	0	2021-11-20 01:46:18.373196	2021-11-20 01:46:53.295086
+6	Globi	0	2021-11-20 01:47:32.361073	2021-11-20 01:56:46.097871
+7	Globi	0	2021-11-20 02:41:06.867438	2021-11-20 02:41:06.867438
+8	Globi	0	2021-11-20 02:46:14.979742	2021-11-20 02:50:01.676746
+9	Pavel green	0	2021-11-20 09:33:11.435511	2021-11-20 09:33:54.577913
+10	Pavel green	0	2021-11-20 09:37:04.437734	2021-11-20 09:37:10.948641
+11	Арчи	0	2021-11-21 23:01:38.645312	2021-11-21 23:03:35.680433
+12	Арчи	0	2021-11-21 23:03:56.442053	2021-11-21 23:04:17.384383
+13	Арчи	0	2021-11-21 23:05:45.50995	2021-11-21 23:07:09.164145
+14	Арчи	0	2021-11-21 23:08:41.150943	2021-11-21 23:09:40.620405
+15	Sergoi	0	2021-11-21 23:13:46.103524	2021-11-21 23:14:16.3978
+16	Арчи	0	2021-11-22 11:20:56.777456	2021-11-22 11:21:55.823055
+17	Globi	0	2021-11-25 19:05:35.195907	2021-11-25 19:06:18.420063
+18	Globi	0	2021-11-25 19:12:12.047278	2021-11-25 19:12:18.968883
+19	Globi	0	2021-11-25 19:14:51.351031	2021-11-25 19:14:51.351031
+20	Globi	0	2021-11-25 19:25:03.053818	2021-11-25 19:25:03.058599
+21	Globi	0	2021-11-25 20:01:01.067463	2021-11-25 20:01:01.067463
+22	Globi	0	2021-11-25 21:57:41.917414	2021-11-25 21:57:41.923929
+23	parsdotnet	0	2021-11-27 17:44:06.539655	2021-11-27 17:47:43.293213
+24	parsdotnet	0	2021-11-27 17:48:00.246002	2021-11-27 17:48:23.610128
+\.
+
+
+--
+-- Data for Name: subscribe; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.subscribe (sid, did) FROM stdin;
+1	9a9c34d6-6c6e-4dfe-b510-20953def482f
+\.
+
+
+--
+-- Data for Name: token_order; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.token_order (id, bname, tok, order_id, tsum, wsum, cr_at, st, red_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: token_payout; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.token_payout (id, pid, tom, suma, cr_at) FROM stdin;
+1	1	Globi	0.0604	2021-03-23 21:41:12.647399
+\.
+
+
+--
+-- Data for Name: tokens; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.tokens (token, token_type, email, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: tokens_buy; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.tokens_buy (us_id, amount, tok, crat) FROM stdin;
+1	856000	10	2021-03-13 22:04:50.893419+03
+1	865000	10	2021-03-13 22:16:07.619236+03
+\.
+
+
+--
+-- Data for Name: video; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.video (r_id, nick, src, poster, crat, v) FROM stdin;
+1	Globi	1.webm	1.png	2021-11-20 03:08:03.464645	148
+\.
+
+
+--
+-- Data for Name: vroom; Type: TABLE DATA; Schema: public; Owner: root
+--
+
+COPY public.vroom (us_id, nick, src, p, descr, crat, typ, v) FROM stdin;
+105	oleg	oleg.mp4	oleg.jpg	\N	2021-11-19 23:09:44.422805	fake	1
+58	vas	vas.webm	vas.jpg	\N	2020-12-18 23:43:51.169988	fake	2
+98	christian	christian.webm	christian.webp	\N	2021-11-19 21:47:30.415128	fake	1
+106	robi	robi.mp4	robi.webp	\N	2021-11-19 23:11:18.849089	fake	1
+57	slava	slava.webm	slava.jpg	\N	2020-12-18 23:40:50.079179	fake	1
+107	vitia	vitja.mp4	vitja.jpg	\N	2021-11-19 23:13:37.523159	fake	1
+99	teplo	teplo.mp4	teplo.webp	\N	2021-11-19 21:53:49.745067	fake	2
+103	lex	lex.webm	lex.webp	\N	2021-11-19 23:05:38.817489	fake	1
+59	vanya1	vanya.webm	vanya.jpg	\N	2020-12-18 23:45:13.600376	fake	1
+100	elisej	elisej.mp4	elisej.webp	\N	2021-11-19 22:11:22.480949	fake	1
+101	alka	alka.mp4	alka.jpg	\N	2021-11-19 22:59:24.845207	fake	2
+102	galo	galo.mp4	galo.jpg	\N	2021-11-19 23:02:57.014767	fake	1
+60	mickey	mickey.webm	mickey.jpg	\N	2020-12-19 18:48:05.774875	noview	1
+104	misha	misha.webm	misha.webp	\N	2021-11-19 23:08:05.610475	fake	1
+\.
+
+
+--
+-- Name: blog_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.blog_id_seq', 2, true);
+
+
+--
+-- Name: buser_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.buser_id_seq', 150, true);
+
+
+--
+-- Name: cladr_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.cladr_id_seq', 1, true);
+
+
+--
+-- Name: obi_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.obi_id_seq', 24, true);
+
+
+--
+-- Name: reklama_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.reklama_id_seq', 2, true);
+
+
+--
+-- Name: sean_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.sean_id_seq', 24, true);
+
+
+--
+-- Name: token_order_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.token_order_id_seq', 1, false);
+
+
+--
+-- Name: token_payout_id_seq; Type: SEQUENCE SET; Schema: public; Owner: root
+--
+
+SELECT pg_catalog.setval('public.token_payout_id_seq', 1, true);
+
+
+--
+-- Name: bitaps_tmp bitaps_tmp_inv_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.bitaps_tmp
+    ADD CONSTRAINT bitaps_tmp_inv_key UNIQUE (inv);
+
+
+--
+-- Name: blog blog_title_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.blog
+    ADD CONSTRAINT blog_title_key UNIQUE (title);
+
+
+--
+-- Name: buser buser_bname_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.buser
+    ADD CONSTRAINT buser_bname_key UNIQUE (bname);
+
+
+--
+-- Name: buser buser_email_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.buser
+    ADD CONSTRAINT buser_email_key UNIQUE (email);
+
+
+--
+-- Name: cladr cladr_nick_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.cladr
+    ADD CONSTRAINT cladr_nick_key UNIQUE (nick);
+
+
+--
+-- Name: reklama reklama_nick_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.reklama
+    ADD CONSTRAINT reklama_nick_key UNIQUE (nick);
+
+
+--
+-- Name: tokens tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.tokens
+    ADD CONSTRAINT tokens_pkey PRIMARY KEY (token);
+
+
+--
+-- Name: video video_nick_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.video
+    ADD CONSTRAINT video_nick_key UNIQUE (nick);
+
+
+--
+-- Name: vroom vroom_nick_key; Type: CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.vroom
+    ADD CONSTRAINT vroom_nick_key UNIQUE (nick);
+
+
+--
+-- Name: bitaps_tmp expire_address_trigger; Type: TRIGGER; Schema: public; Owner: root
+--
+
+CREATE TRIGGER expire_address_trigger AFTER INSERT ON public.bitaps_tmp FOR EACH ROW EXECUTE PROCEDURE public.expire_address();
+
+
+--
+-- Name: chat expire_chat_delete_old_rows_trigger; Type: TRIGGER; Schema: public; Owner: root
+--
+
+CREATE TRIGGER expire_chat_delete_old_rows_trigger AFTER INSERT ON public.chat FOR EACH ROW EXECUTE PROCEDURE public.expire_chat_delete_old_rows();
+
+
+--
+-- Name: obi expire_obi_delete_old_rows_trigger; Type: TRIGGER; Schema: public; Owner: root
+--
+
+CREATE TRIGGER expire_obi_delete_old_rows_trigger AFTER INSERT ON public.obi FOR EACH ROW EXECUTE PROCEDURE public.expire_obi_delete_old_rows();
+
+
+--
+-- Name: cladr notif_smart; Type: TRIGGER; Schema: public; Owner: root
+--
+
+CREATE TRIGGER notif_smart AFTER UPDATE ON public.cladr FOR EACH ROW EXECUTE PROCEDURE public.notify_smart();
+
+
+--
+-- Name: bitaps_tmp bitaps_tmp_bname_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.bitaps_tmp
+    ADD CONSTRAINT bitaps_tmp_bname_fkey FOREIGN KEY (bname) REFERENCES public.buser(bname);
+
+
+--
+-- Name: cladr cladr_nick_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.cladr
+    ADD CONSTRAINT cladr_nick_fkey FOREIGN KEY (nick) REFERENCES public.buser(bname);
+
+
+--
+-- Name: sean sean_sname_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.sean
+    ADD CONSTRAINT sean_sname_fkey FOREIGN KEY (sname) REFERENCES public.buser(bname);
+
+
+--
+-- Name: token_order token_order_bname_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.token_order
+    ADD CONSTRAINT token_order_bname_fkey FOREIGN KEY (bname) REFERENCES public.buser(bname);
+
+
+--
+-- Name: token_payout token_payout_tom_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.token_payout
+    ADD CONSTRAINT token_payout_tom_fkey FOREIGN KEY (tom) REFERENCES public.buser(bname);
+
+
+--
+-- Name: tokens tokens_email_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.tokens
+    ADD CONSTRAINT tokens_email_fkey FOREIGN KEY (email) REFERENCES public.buser(email) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: video video_nick_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.video
+    ADD CONSTRAINT video_nick_fkey FOREIGN KEY (nick) REFERENCES public.buser(bname);
+
+
+--
+-- Name: vroom vroom_nick_fkey; Type: FK CONSTRAINT; Schema: public; Owner: root
+--
+
+ALTER TABLE ONLY public.vroom
+    ADD CONSTRAINT vroom_nick_fkey FOREIGN KEY (nick) REFERENCES public.buser(bname);
+
+
+--
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA public TO globi;
+
+
+--
+-- Name: FUNCTION bitaps_cb(usid integer, bcode character varying, amt integer); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.bitaps_cb(usid integer, bcode character varying, amt integer) TO globi;
+
+
+--
+-- Name: FUNCTION expire_address(); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.expire_address() TO globi;
+
+
+--
+-- Name: FUNCTION expire_chat_delete_old_rows(); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.expire_chat_delete_old_rows() TO globi;
+
+
+--
+-- Name: FUNCTION expire_obi_delete_old_rows(); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.expire_obi_delete_old_rows() TO globi;
+
+
+--
+-- Name: FUNCTION get_address(usid integer, st integer, zeit text); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.get_address(usid integer, st integer, zeit text) TO globi;
+
+
+--
+-- Name: FUNCTION notify_smart(); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.notify_smart() TO globi;
+
+
+--
+-- Name: FUNCTION on_token_order(bname character varying, tok integer, tsum numeric, wsum numeric, order_id bigint); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.on_token_order(bname character varying, tok integer, tsum numeric, wsum numeric, order_id bigint) TO globi;
+
+
+--
+-- Name: FUNCTION on_token_payout(tom character varying, suma numeric, pid integer); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.on_token_payout(tom character varying, suma numeric, pid integer) TO globi;
+
+
+--
+-- Name: FUNCTION on_token_transfer(tom character varying, fro character varying, amt integer); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.on_token_transfer(tom character varying, fro character varying, amt integer) TO globi;
+
+
+--
+-- Name: FUNCTION request_password_reset(email text); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.request_password_reset(email text) TO globi;
+
+
+--
+-- Name: FUNCTION reset_password(email text, token uuid, pwd text); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.reset_password(email text, token uuid, pwd text) TO globi;
+
+
+--
+-- Name: FUNCTION set_subscribe(sid integer, did text); Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON FUNCTION public.set_subscribe(sid integer, did text) TO globi;
+
+
+--
+-- Name: TABLE ads; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.ads TO globi;
+
+
+--
+-- Name: TABLE bitaps_tmp; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.bitaps_tmp TO globi;
+
+
+--
+-- Name: TABLE blog; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.blog TO globi;
+
+
+--
+-- Name: SEQUENCE blog_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.blog_id_seq TO globi;
+
+
+--
+-- Name: TABLE buser; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.buser TO globi;
+
+
+--
+-- Name: SEQUENCE buser_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.buser_id_seq TO globi;
+
+
+--
+-- Name: TABLE chat; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.chat TO globi;
+
+
+--
+-- Name: TABLE cladr; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.cladr TO globi;
+
+
+--
+-- Name: SEQUENCE cladr_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.cladr_id_seq TO globi;
+
+
+--
+-- Name: TABLE obi; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.obi TO globi;
+
+
+--
+-- Name: SEQUENCE obi_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.obi_id_seq TO globi;
+
+
+--
+-- Name: TABLE prim_adr; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.prim_adr TO globi;
+
+
+--
+-- Name: TABLE reklama; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.reklama TO globi;
+
+
+--
+-- Name: SEQUENCE reklama_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.reklama_id_seq TO globi;
+
+
+--
+-- Name: TABLE sean; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.sean TO globi;
+
+
+--
+-- Name: SEQUENCE sean_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.sean_id_seq TO globi;
+
+
+--
+-- Name: TABLE subscribe; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.subscribe TO globi;
+
+
+--
+-- Name: TABLE token_order; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.token_order TO globi;
+
+
+--
+-- Name: SEQUENCE token_order_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.token_order_id_seq TO globi;
+
+
+--
+-- Name: TABLE token_payout; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.token_payout TO globi;
+
+
+--
+-- Name: SEQUENCE token_payout_id_seq; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON SEQUENCE public.token_payout_id_seq TO globi;
+
+
+--
+-- Name: TABLE tokens; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.tokens TO globi;
+
+
+--
+-- Name: TABLE tokens_buy; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.tokens_buy TO globi;
+
+
+--
+-- Name: TABLE video; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.video TO globi;
+
+
+--
+-- Name: TABLE vroom; Type: ACL; Schema: public; Owner: root
+--
+
+GRANT ALL ON TABLE public.vroom TO globi;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
