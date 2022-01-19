@@ -75,6 +75,9 @@ await next()
 }
 app.use(xhr());
 var transporter;
+var xirsys;
+var ya_sec;
+var xir_sec;
 
 app.use(async (ctx, next)=>{
 console.log("FROM HAUPT MIDDLEWARE =>", ctx.path, ctx.method);
@@ -84,10 +87,44 @@ ctx.db = pool;
 ctx.transporter = transporter;
 ctx.state.meta = meta;
 ctx.state.warnig = warnig;
+
+ctx.state.xirsys = xirsys;
+
+ctx.ya_sec = ya_sec;
+ctx.xir_sec = xir_sec;
+
 if(ctx.request.header["user-agent"]){
 	ctx.session.ua = ctx.request.header["user-agent"];
 	ctx.session.ref = ctx.request.header["referer"];
 	}
+if(ctx.isAuthenticated() && ctx.state.user.brole == "superadmin"){
+if(ctx.path == '/api/set_xirsys'){
+	let {xir} = ctx.request.body;
+	xirsys = xir;
+	ctx.state.xirsys = xirsys;
+	try{
+	await pool.query(`update prim_adr set xir=$1`, [JSON.stringify(xirsys)])
+}catch(e){console.log(e);}
+	}else if(ctx.path == "/api/set_ya_sec"){
+		let {yasec} = ctx.request.body;
+		ya_sec = yasec;
+		ctx.ya_sec = ya_sec;
+		try{
+			await pool.query('update prim_adr set ya_sec=$1', [ya_sec])
+			}catch(e){
+				console.log(e);
+				}
+		}else if(ctx.path == "/api/set_xir_sec"){
+			let {xirsec} = ctx.request.body;
+			xir_sec = xirsec;
+			ctx.xir_sec = xir_sec;
+			try{
+				await pool.query('update prim_adr set xir_sec=$1', [xir_sec])
+			}catch(e){
+				console.log(e);
+				}
+			}else{}	
+}
 	await next();	
 })
 
@@ -152,7 +189,7 @@ console.log('creating directory public/images/tmp')
 }catch(e){console.log(e)}	
 }
 
-//}
+
 
 	
 

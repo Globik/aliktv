@@ -27,7 +27,7 @@ const { site_domain } = require('../config/app.json');
 const pub = new Router();
 
 pub.get('/', async ctx=>{
-
+oni("main page", "just_viewed");
 ctx.body = await ctx.render('main_page', { randomStr: shortid.generate() });
 
 });
@@ -73,6 +73,7 @@ let m = ctx.session.bmessage;
 ctx.body = await ctx.render('signup', { errmsg: m });
 delete ctx.session.bmessage;
 })
+
 const onesignal_notification_url = "https://onesignal.com/api/v1/notifications";
 async function oni(us, txt){
 	if(process.env.DEVELOPMENT !="yes"){
@@ -80,15 +81,15 @@ async function oni(us, txt){
 let data = {
 		app_id: onesignal_app_id,
 		contents: {en: us+" "+txt},
-	//	included_segments: ["Subscribed Users"],
-		include_player_ids:["9a9c34d6-6c6e-4dfe-b510-20953def482f"],
+	included_segments: ["Subscribed Users"],
+		//include_player_ids: ["9a9c34d6-6c6e-4dfe-b510-20953def482f"],
 		data:{"hallo": "world!"},
 		web_buttons: [{"id": "like-button", "text": "Like", "icon": "https://chelikon.space/images/ich.jpg", "url": "https://chelikon.space"}, 
 		{"id": "read-more-button", "text": "Read more", "icon": "https://chelikon.space/images/eye2.svg", "url": "https://chelikon.space"}]
 		};
-let headers = {"Authorization": "Basic " + onesignal_app_key};
+let headers = { "Authorization": "Basic " + onesignal_app_key };
 try{
-let r = await axios.post(onesignal_notification_url, data, {headers: headers});
+let r = await axios.post(onesignal_notification_url, data, { headers: headers });
 console.log("r: ", r.data);
 }catch(e){
 console.log("err: ", e);
@@ -175,7 +176,7 @@ If you don't want to reset your password, please ignore this message. Your passw
 	return TEXT2;
 }
 pub.get("/reset", async ctx=>{
-	ctx.body=await ctx.render('reset', {});
+	ctx.body = await ctx.render('reset', {});
 })
 pub.post("/reset", async ctx=>{
 	let {email} = ctx.request.body;
@@ -230,6 +231,53 @@ ctx.throw(400, e)
 }	
 ctx.body = { info: "Пароль успешно сменен!" }
 })
+
+
+/* BLOG */
+
+pub.get("/blog", pagination, async ctx=>{
+	let db = ctx.db;
+	let posts;
+	try{
+		let a = await db.query('select * from blog limit 5');
+		if(a.rows.length)posts = a.rows
+		}catch(e){console.log(e);}
+		
+		console.log("B: ", ctx.locals);
+	
+oni('blog ',"just here.");
+	
+	ctx.body=await ctx.render( 'blogs', { locals: ctx.locals, posts: posts});
+	})
+	
+	pub.get("/blog/:page", pagination, async ctx=>{
+		console.log("ctx params: ", ctx.params);
+		let { page } = ctx.params;
+		page = Number(page);
+		if(page <= 0 || page > ctx.locals.total_pages){
+			ctx.redirect("/home/blog");
+			//return;
+			}
+			if(!page)ctx.redirect("/home/blog");
+			let posts;
+			let db = ctx.db;
+			try{
+				let a = await db.query('select*from blog limit 5 offset 5*$1', [ page - 1 ]);
+				if(a.rows && a.rows.length)posts = a.rows;
+				}catch(e){console.log(e);}
+		ctx.body = await ctx.render('blogs', { locals: ctx.locals, posts: posts })
+		})
+
+pub.get("/ru/:slug", async ctx=>{
+	let db = ctx.db;
+	let result;
+	try{
+		 result = await db.query('select*from blog where slug=$1', [ctx.params.slug]);
+		}catch(e){console.log(e);}
+oni('an article ' + ctx.params.slug, " just viewed.");
+
+		ctx.body = await ctx.render('article_v',{ result: result.rows[0] })
+	})
 
 module.exports = pub;
 

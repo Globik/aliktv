@@ -8,7 +8,7 @@ var html_admin_nav_menu=n=>{
 <li><a href="/home/profile">Профили</a></li>
 <li><a href="/home/newavas">Проверить аватарки</a></li>
 <li><a href="/home/newmsg">Проверить объявления</a></li>
-<li><a href="/home/xirsys">turn сервер</a>&nbsp;${n.xirsys?"yes":"no"}</li>
+<li><a href="/admin/xirsys">turn сервер</a>&nbsp;${n.xirsys?"yes":"no"}</li>
 <li><a href="/home/reklama">Реклама</a></li>
 <li><a href="/home/write-post">Написать в блог</a></li>
 <li><a href="/home/videofiles">Видеофайлы</a></li>
