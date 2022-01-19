@@ -18,9 +18,9 @@ ${buser && buser.brole=='superadmin'? html_admin_nav_menu.html_admin_nav_menu(n)
 <div id="fcontent"></div>
 <br>
 <form name="postform" method="post" action="/api/writePost">
-<label>Post title:<br><input type="text" name="title" equired placeholder="title"><label><br>
-<label>Author:<br><input type="text" name="auth" placeholder="author" value="${buser.bname}" equired></label><br>
-<label>Text:<br><textarea name="body" placeholder="text" equired></textarea></label><br>
+<label>Post title:<br><input type="text" name="title" required placeholder="title"><label><br>
+<label>Author:<br><input type="text" name="author" placeholder="author" value="${buser.bname}" required></label><br>
+<label>Text:<br><textarea name="body" placeholder="text" required></textarea></label><br>
 <label>Metatag description:<br><textarea name="descr" placeholder="social description"></textarea></label><br>
 <input type="reset" value="Сбросить">
 <input type="submit" value="Сохранить">

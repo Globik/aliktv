@@ -59,6 +59,50 @@ adm.post("/api/set_xir_sec", auth, async ctx=>{
 	})
 	
 	/* END XIRSYS */
+	
+	/* BLOG */
+	
+	adm.get("/home/write-post", authed, async ctx=>{
+	ctx.body = await ctx.render('writePost', {} );
+	})
+	
+adm.post("/api/writePost", auth, bodyParser({ multipart: true, formidable: {} }),
+	 async ctx=>{
+		 console.log(ctx.request.body)
+		let { author, title, body, descr } = ctx.request.body;
+		if(!author || !title || !body)ctx.throw(400, "no author or title or body!");
+		var titi = sluger(title);
+		let db = ctx.db;
+		try{
+			
+			await db.query('insert into blog(auth, title, slug, body, descr) values($1,$2,$3,$4,$5)', [ author, title, titi, body, descr ]);
+			}catch(e){
+			ctx.throw(400, e);
+			}
+		ctx.body = { info: "OK, saved!" }
+		})
+		
+		adm.post('/api/save_blog', auth, async ctx=>{
+			let { text, id, title, descr } = ctx.request.body;
+			if(!text || !id || !title)ctx.throw(400, "No data provided");
+			let db = ctx.db;
+			let ti = sluger(title);
+			try{
+				console.log("descr: ", descr);
+				await db.query('update blog set title=$1, slug=$2, body=$3 , descr=$4 where id=$5', [ title, ti, text, descr, id ]);
+				}catch(e){ctx.throw(400, e);}
+				ctx.body = { info: "OK saved!" }
+			})
+			
+adm.post("/api/remove_post", auth, async ctx=>{
+	let { id } = ctx.request.body;
+	if(!id)ctx.throw(400, "No id");
+	let db = ctx.db;
+	try{
+		await db.query('delete from blog where id=$1', [ id ]);
+		}catch(e){ctx.throw(400, e);}
+ctx.body = { info: "OK deleted" }	
+})			
 
 module.exports = adm;
 
