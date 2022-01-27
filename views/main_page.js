@@ -28,6 +28,7 @@ description: n.meta.main_page.description
 csslink: "/css/main2.css", cssl: ["/css/main_page.css", "/css/mediasoup.css"], luser:buser})}
 <!-- https://app.onesignal.com -->
 ${process.env.DEVELOPMENT == "yes" ? '' : '<script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>'}
+<script src="js/mediasoup-client.js"></script>
 </head>
 <body>${n.warnig ? `<div id="warnig">${n.warnig}</div>` : ''}
 <div id="oldBrowser">You have the old browser. Please use the latest browsers - Firebox oder Chrome.</div>
@@ -82,12 +83,15 @@ ${n.banner && n.banner.length ? `<div id="haupt-banner">${get_banner(n.banner)}<
 ${n.m ? n.m.msg : ''}
 
 
-<div><button onclick="showAnketaForms(this);">Start an anonym live broadcasting</button></div>
+<div><button onclick="showAnketaForms(this);">старт медиа</button>&nbsp;&nbsp;<button onclick="stopMedia();">стоп медиа</button></div>
+
 <div id="anketaForms">
+ <input type="checkbox" id="use_video" checked="1">video</input>
+ <input type="checkbox" id="use_audio" checked="1">audio</input>
 <div><label>Your bitcoin addresse:&nbsp;&nbsp;<input type="text" placeholder="Your bitcoin address"></label>&nbsp;&nbsp;<button>save</button></div>
 <div><label>Your bank cards number:&nbsp;&nbsp;<input type="text" placeholder="Your bank card number"></label>&nbsp;&nbsp;<button>save</button></div>
 <div><label>Your status:&nbsp;&nbsp;<input  type="text" placeholder="Your status"></label>&nbsp;&nbsp;<button>save</button></div>
-<div><button onclick="broadcasting(this);">Are you ready broadcasting? Go!</button></div>
+<div><button id="startTranslation" onclick="publish(this);">Запустить трансляцию</button>&nbsp;&nbsp;<button id="stopTranslation" onclick="unpublish();">остановить трансляцию</button></div>
 </div>
 <div id="mainpanel">here is my status</div>
 <section id="multimedia">
@@ -100,7 +104,7 @@ ${n.m ? n.m.msg : ''}
 <div id="allwrapper">
 
 <div id="videosection">
-	<div id="videowrapper"><div class="knopka" onclick="video_knopka_start(this);"><img src="/images/play2.svg"></div><video poster="/images/tvpic.jpg"></video></div>
+	<div id="videowrapper"><div class="knopka" onclick="subscribe(this);"><img src="/images/play2.svg"></div><video id="localVideo" poster="/images/tvpic.jpg"></video></div>
 
 </div>
 

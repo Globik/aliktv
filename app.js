@@ -17,9 +17,11 @@ const Router = require('koa-router');
 const url = require('url');
 const Pool = require('pg-pool');
 const PgStore = require('./libs/pg-sess.js');
+const shortid = require('shortid');
 const PS = require('pg-pubsub');
 const pgtypes = require('pg').types;
 const render = require('./libs/render.js');
+const  handleMediasoup  = require("./libs/mediasoup_help.js")
 const serve = require('koa-static');
 const session = require('koa-session');
 
@@ -225,12 +227,29 @@ if(ws.isAlive === false)return ws.terminate();
 ws.isAlive = false;
 ws.ping(noop);	
 })	
-},30000)
+},3000000)
 function heartbeat(){this.isAlive = true;}
 
 wss.on('connection', function ws_connect(ws, req){
-ws.on('message', async function sock_msg(msg){})
-ws.on('close', async function ws_close(){})	
+	console.log('websocket opend');
+	ws.id = shortid.generate();
+	let data;
+  wsend(ws, { type: 'welcome', id: ws.id });
+  ws.isAlive = true;
+ws.on('pong', heartbeat);
+ws.on('message', async function sock_msg(msg){
+		try{
+	 data = JSON.parse(msg);console.log('data ', data)}catch(e){console.log(e);return;}
+	 
+	 if(data.request = "mediasoup"){
+ handleMediasoup.handleMediasoup(ws, data, WebSocket, wss).mediasoup_t();
+ return;
+	}
+	})
+ws.on('close', async function ws_close(){
+	console.log("disconnect");
+		handleMediasoup.handleMediasoup(ws, data, WebSocket, wss).cleanUpPeer();
+	})	
 })
 
 function wsend(ws, obj){
