@@ -1,5 +1,5 @@
 "use strict";
-//var pool=require('./app4.js');
+
 const ms = require('ms');
 const EventEmitter = require('events');
 module.exports = class PgSession extends EventEmitter {
@@ -39,7 +39,6 @@ module.exports = class PgSession extends EventEmitter {
 
     static get defaultOpts() {
         return {
-            schema: "public",
             table: "session",
             create: true, //Create a new session table by default
             cleanupTime: ms("45 minutes")
@@ -58,11 +57,11 @@ module.exports = class PgSession extends EventEmitter {
 
     //    console.log('If we need to create the tables, return a promise that resolves once the query completes')
         //Otherwise just setup the cleanup and return an empty promise
-        let promise = this.options.create ? this.query(this.createSql) : Promise.resolve();
+        let promise =/* this.options.create ? this.query(this.createSql) : */Promise.resolve();
 //console.log('promise: ', promise)
         //Once we've finished creation, schedule cleanup and tell everyone we're ready
         return new Promise((res, rej)=> {
-			this.query(this.createSql);
+			//this.query(this.createSql);
 			//console.log('emmit connect?');
             this.scheduleCleanup();
             this.ready = true;
@@ -77,12 +76,12 @@ module.exports = class PgSession extends EventEmitter {
      * @returns The session object if it exists, otherwise false
      */
 
-    //*get(sid) {
+   
 async  get(sid){
  if (!this.ready)
 throw new Error(`Error trying to access koa postgres session: session setup has not been run.
             See https://github.com/TMiguelT/koa-pg-session#the-setup-function for details.`);
- const existing = (await this.query(this.getValueSql + `'${sid}'`/*, [sid]*/));
+ const existing = (await this.query(this.getValueSql, [sid]));
 
         //If there is no such row, return false
         if (existing.rows.length <= 0){
@@ -100,7 +99,7 @@ throw new Error(`Error trying to access koa postgres session: session setup has 
      * @param ttl The time to live, i.e. the time until the session expires. Defaults to 45 minutes
      */
 
-   // *set(sid, sess, ttl) {
+  
 async set(sid,sess,ttl){
         if (!this.ready)
             throw new Error(`Error trying to modify koa postgres session: session setup has not been run.
@@ -121,7 +120,7 @@ async set(sid,sess,ttl){
      * Destroy the session with the given sid
      * @param sid The Koa session ID of the session to destroy
      */
-   // *destroy(sid) {
+  
 		async destroy(sid){
         await this.query(this.destroyValueSql, [sid]);
     };
@@ -143,25 +142,27 @@ async set(sid,sess,ttl){
         }, sess.options.cleanupTime);
     };
 get createSql() {
+	/*
 return `CREATE SCHEMA IF NOT EXISTS ${this.options.schema};
 CREATE TABLE IF NOT EXISTS ${this.options.schema}.${this.options.table}(id TEXT NOT NULL PRIMARY KEY,
 expiry timestamp NOT NULL,session JSON)`;
+*/ 
     }
 get getValueSql() {
-return `select session from ${this.options.schema}.${this.options.table} where id=`;
+return `select session from ${this.options.table} where id=$1`;
     }
 get updateValueSql() {
-return `update ${this.options.schema}.${this.options.table} 
+return `update ${this.options.table} 
 set session=$1, expiry=to_timestamp($2) where id=$3`;
     }
 get insertValueSql() {console.log("inserting a session");
-return  `INSERT INTO ${this.options.schema}.${this.options.table}(id, session, expiry) 
+return  `INSERT INTO ${this.options.table}(id, session, expiry) 
 VALUES($1, $2, to_timestamp($3) )`;
     }
 get destroyValueSql() {
-return `DELETE from ${this.options.schema}.${this.options.table} WHERE id = $1`;
+return `DELETE from ${this.options.table} WHERE id = $1`;
     }
 get cleanupSql() {
-return `DELETE FROM ${this.options.schema}.${this.options.table} WHERE expiry <= to_timestamp(${Date.now()/1000})`;
+return `DELETE FROM ${this.options.table} WHERE expiry <= to_timestamp(${Date.now()/1000})`;
     }
 };

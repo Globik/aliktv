@@ -1,5 +1,5 @@
 -- \i /home/globi/sex_for_many/sql/prim_adr.sql
--- heroku pg:psql --app frozen-atoll-47887
+
 drop table if exists prim_adr;
 create table prim_adr(
 adr varchar(40) not null,

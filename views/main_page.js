@@ -83,7 +83,7 @@ ${n.banner && n.banner.length ? `<div id="haupt-banner">${get_banner(n.banner)}<
 ${n.m ? n.m.msg : ''}
 
 
-<div><button onclick="showAnketaForms(this);">старт медиа</button>&nbsp;&nbsp;<button onclick="stopMedia();">стоп медиа</button></div>
+<div><button onclick="showAnketaForms(this);">вкл вебкамеру</button>&nbsp;&nbsp;<button onclick="stopMedia();">выкл вебкамеру</button></div>
 
 <div id="anketaForms">
  <input type="checkbox" id="use_video" checked="1">video</input>

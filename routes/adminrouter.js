@@ -104,6 +104,20 @@ adm.post("/api/remove_post", auth, async ctx=>{
 ctx.body = { info: "OK deleted" }	
 })			
 
+/* PROFILES */
+adm.get('/home/profile', authed, async ctx=>{
+ctx.body = await ctx.render( 'profiles', {});	
+})
+
+adm.post("/get_session", auth, async ctx=>{
+let db = ctx.db;
+let res;
+try{
+	res = await db.query('select session from session');
+}catch(e){ctx.throw(400, e);}	
+ctx.body = { res: res.rows }
+})			
+
 module.exports = adm;
 
 function auth(ctx,next){
