@@ -83,37 +83,39 @@ ${n.banner && n.banner.length ? `<div id="haupt-banner">${get_banner(n.banner)}<
 ${n.m ? n.m.msg : ''}
 
 
-<div><button onclick="showAnketaForms(this);">вкл вебкамеру</button>&nbsp;&nbsp;<button onclick="stopMedia();">выкл вебкамеру</button></div>
+<div><button id="startMediaBtn" onclick="showAnketaForms(this);"${n.vroom ? ' disabled' : ''}>вкл вебкамеру</button>&nbsp;&nbsp;<button id="stopMediaBtn" onclick="stopMedia(this);"${n.vroom ? ' disabled' : ''}>выкл вебкамеру</button></div>
 
 <div id="anketaForms">
  <input type="checkbox" id="use_video" checked="1">video</input>
  <input type="checkbox" id="use_audio" checked="1">audio</input>
+ <!--
 <div><label>Your bitcoin addresse:&nbsp;&nbsp;<input type="text" placeholder="Your bitcoin address"></label>&nbsp;&nbsp;<button>save</button></div>
 <div><label>Your bank cards number:&nbsp;&nbsp;<input type="text" placeholder="Your bank card number"></label>&nbsp;&nbsp;<button>save</button></div>
 <div><label>Your status:&nbsp;&nbsp;<input  type="text" placeholder="Your status"></label>&nbsp;&nbsp;<button>save</button></div>
-<div><button id="startTranslation" onclick="publish(this);">Запустить трансляцию</button>&nbsp;&nbsp;<button id="stopTranslation" onclick="unpublish();">остановить трансляцию</button></div>
+-->
+<div><button id="startTranslation" onclick="publish(this);" disabled>Запустить трансляцию</button>&nbsp;&nbsp;
+<button id="stopTranslation" onclick="unpublish(this);"${n.vroom ? ' disabled' : ''}>остановить трансляцию</button></div>
 </div>
-<div id="mainpanel">here is my status</div>
+${n.vroom ? `<div id="mainpanel">${n.vroom.descr}</div>` : ''}
 <section id="multimedia">
 <div id="chatinfo">
-<div class="span"><span><b>bitcoins:</b></span><span>0</span>&nbsp;&nbsp;<span><b>viewers:</b></span>&nbsp;<span>0</span>
-<span><b>chat:</b></span>&nbsp;<span id="chatCount">0</span>&nbsp;
+<div class="span"><!-- <span><b>bitcoins:</b></span><span>0</span>&nbsp;&nbsp; --><span><b>зрителей:</b></span>&nbsp;<span id="vV">${n.vroom ? n.vroom.v : 0}</span>
+<!-- <span><b>chat:</b></span>&nbsp;<span id="chatCount">0</span>&nbsp;-->
 </div>
 <div class="imghalter2" onclick="hide_chat(this);"><img src="/images/FullScreen.png"></div>
 </div>
 <div id="allwrapper">
 
 <div id="videosection">
-	<div id="videowrapper"><div class="knopka" onclick="subscribe(this);"><img src="/images/play2.svg"></div><video id="localVideo" poster="/images/tvpic.jpg"></video></div>
-
+<div id="videowrapper"><div id="knopkaSubscribe" class="knopka" onclick="subscribe(this);"><img src="/images/play2.svg"></div><video id="localVideo" poster="${n.vroom ? n.vroom.poster : '/images/tvpic.jpg'}"></video></div>
 </div>
 
-
+</section>
 
 
 
 <hr>
-
+Сейчас на сайте <span id="spanWhosOn">0</span> человек.<hr>
 
 
 

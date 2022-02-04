@@ -185,7 +185,6 @@ if(refnode.nextSibling.tagName==tagname.toUpperCase())refnode.parentNode.removeC
     /**
      * Автоматическое удаление алерта спустя заданное время
      */
-     console.log(settings.time);
     window.setTimeout(remove, settings.time * 1000);
 
   };

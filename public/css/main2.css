@@ -654,6 +654,7 @@ border: 2px solid rgb(2,106,203);
 letter-spacing:1px;
 border-radius: 2px;
 }
+button[disabled],button[disabled]:hover{background: gray;color: rgb(148,168,181);border-color:silver;}
 
 
 button:hover, input[type=submit]:hover, input[type=reset]:hover{

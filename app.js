@@ -191,6 +191,12 @@ console.log('creating directory public/images/tmp')
 }catch(e){console.log(e)}	
 }
 
+try{
+		await pool.query('delete from vroom');
+		}catch(err){
+		console.log(err);
+		}
+
 
 
 	
@@ -227,7 +233,7 @@ if(ws.isAlive === false)return ws.terminate();
 ws.isAlive = false;
 ws.ping(noop);	
 })	
-},3000000)
+}, 3000000)
 function heartbeat(){this.isAlive = true;}
 
 wss.on('connection', function ws_connect(ws, req){
@@ -235,21 +241,31 @@ wss.on('connection', function ws_connect(ws, req){
 	ws.id = shortid.generate();
 	let data;
   wsend(ws, { type: 'welcome', id: ws.id });
+  broadcast_all({ type: "hi", value: wss.clients.size })
   ws.isAlive = true;
 ws.on('pong', heartbeat);
 ws.on('message', async function sock_msg(msg){
 		try{
-	 data = JSON.parse(msg);console.log('data ', data)}catch(e){console.log(e);return;}
+	 data = JSON.parse(msg);
+	// console.log('data ', data)
+	 }catch(e){console.log(e);return;}
 	 
 	 if(data.request = "mediasoup"){
- handleMediasoup.handleMediasoup(ws, data, WebSocket, wss).mediasoup_t();
+ handleMediasoup.handleMediasoup(ws, data, WebSocket, wss, pool).mediasoup_t();
  return;
 	}
 	})
 ws.on('close', async function ws_close(){
 	console.log("disconnect");
-		handleMediasoup.handleMediasoup(ws, data, WebSocket, wss).cleanUpPeer();
-	})	
+	 broadcast_all({ type: "hi", value: wss.clients.size })
+		handleMediasoup.handleMediasoup(ws, data, WebSocket, wss, pool).cleanUpPeer();
+	})
+	
+	function broadcast_all( obj ){
+		wss.clients.forEach(function each( client ){
+			wsend( client, obj );
+			})
+		}	
 })
 
 function wsend(ws, obj){

@@ -16,9 +16,8 @@ const access = util.promisify(fs.access);
 const rmdir = util.promisify(fs.rmdir);
 
 const lstat = util.promisify(fs.lstat);
+const { oni } = require('../libs/web_push.js');
 
-const onesignal_app_key = "ZjVhNjdjYTMtYWJlNS00MjQ1LTljNzctYjEzYWI0NzQxMDc5";
-const onesignal_app_id = "bdd08819-3e41-4e1b-a1bf-13da2ff35f7c";
 
 const walletValidator = require('wallet-address-validator');//0.2.4
 const { RateLimiterMemory } = require('rate-limiter-flexible');
@@ -27,8 +26,16 @@ const { site_domain } = require('../config/app.json');
 const pub = new Router();
 
 pub.get('/', async ctx=>{
+	let db = ctx.db;
+	let vroom;
+	try{
+		let a = await db.query("select * from vroom where typ='all'"); 
+		if( a.rows && a.rows.length == 1 ){
+			vroom = a.rows[ 0 ];
+			}
+		}catch(err){console.log(err);}
 oni("main page", "just_viewed");
-ctx.body = await ctx.render('main_page', { randomStr: shortid.generate() });
+ctx.body = await ctx.render('main_page', { randomStr: shortid.generate(), vroom });
 
 });
 pub.get('/login', async ctx=>{
@@ -74,28 +81,7 @@ ctx.body = await ctx.render('signup', { errmsg: m });
 delete ctx.session.bmessage;
 })
 
-const onesignal_notification_url = "https://onesignal.com/api/v1/notifications";
-async function oni(us, txt){
-	if(process.env.DEVELOPMENT !="yes"){
 
-let data = {
-		app_id: onesignal_app_id,
-		contents: {en: us+" "+txt},
-	included_segments: ["Subscribed Users"],
-		//include_player_ids: ["9a9c34d6-6c6e-4dfe-b510-20953def482f"],
-		data:{"hallo": "world!"},
-		web_buttons: [{"id": "like-button", "text": "Like", "icon": "https://chelikon.space/images/ich.jpg", "url": "https://chelikon.space"}, 
-		{"id": "read-more-button", "text": "Read more", "icon": "https://chelikon.space/images/eye2.svg", "url": "https://chelikon.space"}]
-		};
-let headers = { "Authorization": "Basic " + onesignal_app_key };
-try{
-let r = await axios.post(onesignal_notification_url, data, { headers: headers });
-console.log("r: ", r.data);
-}catch(e){
-console.log("err: ", e);
-}	
-}
-}
 
 pub.post('/signup', (ctx,next)=>{
 	

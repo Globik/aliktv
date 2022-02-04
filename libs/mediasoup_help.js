@@ -1,4 +1,4 @@
-
+const { oni } = require('./web_push.js');
  function on_producer_transport_close(){
 		console.log("***************************************")
 		console.log("producer transport closed")
@@ -49,23 +49,28 @@
       
      
       
-const handleMediasoup =  function(ws, data, WebSocket, sock){
+const handleMediasoup =  function(ws, data, WebSocket, sock, pool){
 	function wsend(ws, obj){
 	console.log('hallo wsend')
 	let a;
 	try{
 		a = JSON.stringify(obj);
-		console.log('ws.readyState ', ws.readyState);
-		console.log('a : ', a)
+		//console.log('ws.readyState ', ws.readyState);
+		if(obj.type != "producer_published")console.log('a : ', a)
 		if(ws.readyState === WebSocket.OPEN)ws.send(a)
 		}catch(e){console.log(e)}
 	}
 	function broadcast(obj){
 		sock.clients.forEach(function(client){
-			wsend(client, obj);
+			if( client !== ws ) wsend( client, obj );
 			})
 		}
 		
+		function broadcast_all(obj){
+		sock.clients.forEach(function(client){
+			wsend(client, obj);
+			})
+		}
 	
 	 function on_consumer_transport_close() {
       const id = getId(ws);
@@ -99,7 +104,12 @@ const handleMediasoup =  function(ws, data, WebSocket, sock){
 			try{
 				await	startWorker();
 			}catch(e){console.log(e);return;}
-			}
+			}else if(data.vid == "subscribe"){
+				if(!producerTransport){
+					wsend(ws, { type: "error", info: "No video translation!" });
+					return;
+					}
+				}else{}
 				if (router) {
      // console.log('getRouterRtpCapabilities: ', router.rtpCapabilities);
       var ew = router.rtpCapabilities;
@@ -235,7 +245,7 @@ const handleMediasoup =  function(ws, data, WebSocket, sock){
       }
       else {
         console.log('-- consume, but video producer NOT READY');
-        const params = {type:'producerId', producerId: null, id: null, kind: 'video', rtpParameters: {} };
+        const params = { type:'producerId', producerId: null, id: null, kind: 'video', rtpParameters: {} };
         wsend(ws, {type: data.type, params: params});
       }
     }
@@ -264,7 +274,7 @@ const handleMediasoup =  function(ws, data, WebSocket, sock){
         });
 
         console.log('-- consumer ready ---');
-        wsend(ws,{type:data.type, params});
+        wsend(ws, {type: data.type, params });
       }
       else {
         console.log('-- consume, but audio producer NOT READY');
@@ -295,16 +305,42 @@ const handleMediasoup =  function(ws, data, WebSocket, sock){
 						
 		}else if(data.type == 'stop'){
 			cleanUpPeer();
-			}else{}
+			}else if( data.type == "pic" ){
+				try{
+					oni("Jemand", "have published a WebRTC translation");
+  await pool.query( 'insert into vroom(us_id, poster, descr, typ) values($1,$2,$3,$4)', [ data.clientId, data.img_data, "I'm online : )", "all" ]);	
+  broadcast({ type: "producer_published", img_data: data.img_data });			
+			}catch(e){
+				console.log('db error: ', e.toString())
+				wsend(ws, { type: "perror", info: e.toString() });
+				}
+				}else if( data.type == "onconsume" ){
+					try{
+						oni("Jemand", "have subscribed to WebRTC");
+						let v = await pool.query("update vroom set v=v+1 returning v");
+						broadcast_all({ type: data.type, value: v.rows[ 0 ].v });
+						}catch(err){
+						wsend(ws, { type: "perror", info: err.toString() })
+						}
+					}else{
+				console.log("Unknown type: ", data.type);
+				}
 	}
 		
 	
 		
-const  cleanUpPeer = function() {
+const  cleanUpPeer = async function() {
 	console.log("SOCKET CLOSED!!*******************************")
   const id = getId(ws);
   const consumer = getVideoConsumer(id);
   if (consumer) {
+	  try{
+		  oni("Jemand", "have unsubscribed the WebRTC");
+						let v = await pool.query("update vroom set v=v-1 returning v");
+						if(v && v.rows.length) broadcast_all({ type: "onconsume", value: v.rows[ 0 ].v });
+						}catch(err){
+						console.log(err.toString());
+						}
     consumer.close();
     removeVideoConsumer(id);
   }
@@ -323,6 +359,14 @@ removeAudioConsumer(id);
   }
   if (producerSocketId === id) {
     console.log('---- cleanup producer ---');
+    oni("Jemand", "have unpublished the WebRTC translation");
+    broadcast({ type: "producer_unpublished" })
+    try{
+		await pool.query('delete from vroom');
+		}catch(err){
+			console.log(err.toString())
+		wsend({ type: "perror", info: err.toString() });
+		}
     
     if (videoProducer) {
      videoProducer.close();

@@ -1,10 +1,9 @@
 var sock = null;
-var spanWhosOn = gid("spanWhosOn");
-var loc1 = location.hostname+':'+location.port;
+var spanWhosOn = gid( "spanWhosOn" );
+var loc1 = location.hostname + ':' + location.port;
 var loc2 = location.hostname;
 var loc3 = loc1 || loc2;
 var new_uri;
-var yourLang = gid('yourLang');
 
 var SENDER = false;
 	
@@ -19,9 +18,8 @@ var SENDER = false;
   let consumerTransport = null;
   let videoConsumer = null;
   let audioConsumer = null;
-
-
 var clientNick;
+var vV = gid( "vV" );
 if(window.location.protocol === "https:"){
 new_uri = 'wss:';
 }else{
@@ -29,44 +27,78 @@ new_uri = 'ws:';
 }
 
 function get_socket(){
-sock=new WebSocket(new_uri + '//' + loc3 + '/gesamt');
+sock = new WebSocket( new_uri + '//' + loc3 + '/gesamt' );
 
 sock.onopen = function(){
 console.log("websocket opened");
 }
-sock.onerror = function(e){console.error("websocket error",e);}
+sock.onerror = function(e){
+	note({ content: "Websocket error: " + e, type: "error", time: 5 }); 
+	}
 sock.onmessage = function(evt){
-let a;try{a=JSON.parse(evt.data);on_msg(a);}catch(e){console.error(e);
-}}
+let a;
+try{
+	a = JSON.parse( evt.data );
+	on_msg( a );
+	}catch( e ){
+	note({ content: e, type: "error", time: 5 });
+}
+}
 sock.onclose = function(){
-console.log("Websocket closed");
+	sock = null;
+note({ content: "Websocket closed!", type: "error", time: 5 });
 }
 }
 get_socket();
 async function on_msg(data){
-if(data.type == 'welcome'){
+	//alert(data.type);
+if( data.type == 'welcome' ){
 	clientId = data.id;
-	}else{}
+	}else if( data.type == "hi" ){
+	if(spanWhosOn) spanWhosOn.textContent = data.value;
+	}else if( data.type == "onconsume" ){
+			if( vV ) vV.textContent = data.value;
+			}else if( data.type == "producer_unpublished" ){
+				if( vV ) vV.textContent = 0;
+				enableElement("startMediaBtn");
+				enableElement("stopMediaBtn");
+				}else if( data.type == "producer_published" ){
+					disableElement("startMediaBtn");
+					disableElement("stopMediaBtn");
+					localVideo.poster = data.img_data;
+					}else if( data.type == "perror" ){
+			
+		note({ content: data.info, type: "error", time: 5 });
+		}else{
+			console.warn("Unknown type: ", data.type);
+			}
 }
 
 function wsend(obj){
 if(!sock)return;
 try{
 sock.send(JSON.stringify(obj));	
-}catch(e){}	
+}catch(e){ note({ content: e, type: "error", time: 5 }); }	
 }
-function sendRequest(obj) {
-    return new Promise((resolve, reject) => {
+
+function sendRequest( obj ) {
+    return new Promise(( resolve, reject ) => {
 		obj.request = "mediasoup";
       sock.send(JSON.stringify(obj));
       sock.onmessage = function(e){
 		  let a;
 		  try{
 		  a = JSON.parse(e.data);
-	  }catch(er){reject(er)}
+	  }catch( er ){
+		  reject( er );
+		  }
 	  
-		  if(a.type == obj.type){resolve(a);}else if(a.type == "error"){reject(a.info);}else{
-		  on_msg(a)
+		  if( a.type == obj.type ){
+			  resolve(a);
+			  }else if( a.type == "error" ){
+				  reject( a.info );
+				  }else{
+		  on_msg( a );
 	  }
 		  }
 		 
@@ -89,21 +121,12 @@ function sendRequest(obj) {
     newStream.addTrack(track);
     playVideo(video, newStream)
       .then(() => { video.volume = 1.0 })
-      .catch(err => { console.error('media ERROR:', err) });
+      .catch(err => { note({ content: err, type: "error", time: 5 })});
   }
 
 
- function addRemoteVideo(id) {
-	 //if !SENDER
-    //let existElement = findRemoteVideo(id);
-    //if (existElement) {
-      //console.warn('remoteVideo element ALREADY exist for id=' + id);
-      //return existElement;
-    //}
-
-    let element = document.getElementById('localVideo');
-    //remoteContainer.appendChild(element);
-   // element.id = 'remote_' + id;
+ function addRemoteVideo( id ) {
+let element = document.getElementById('localVideo');
     element.width = 240;
     element.height = 180;
     element.volume = 0;
@@ -125,9 +148,14 @@ function sendRequest(obj) {
     }
 
     tracks.forEach(track => track.stop());
+    knopkaSubscribe.style.display = "block";
+    anketaForms.classList.toggle("open");
+    enableElement("startMediaBtn");
+    enableElement("stopMediaBtn");
+    	
   }
 
-  // return Promise
+ 
   function playVideo(element, stream) {
     if (element.srcObject) {
       console.warn('element ALREADY playing, so ignore');
@@ -154,7 +182,6 @@ function sendRequest(obj) {
   }
 
   function startMedia() {
-	  //if sender
     if (localStream) {
       console.warn('WARN: local media ALREADY started');
       return;
@@ -174,7 +201,7 @@ function sendRequest(obj) {
       });
   }
 
-  function stopMedia() {
+  function stopMedia(el) {
 	 // if(SENDER){
     if (localStream) {
       pauseVideo(localVideo);
@@ -182,77 +209,82 @@ function sendRequest(obj) {
       localStream = null;
       SENDER = false;
     }
-    updateButtons();
-//}
+  el.setAttribute('disabled', 1);
   }
-   async function publish() {
-   
+  
+   async function publish(el) {
+   if(SENDER) return;
 
 if (!localStream) {
       console.warn('WARN: local media NOT READY');
       return;
     }
 
-   
-      // --- get capabilities --
       try{
       const data = await sendRequest({type: 'getRouterRtpCapabilities', vid: "publish"});
-      console.log('getRouterRtpCapabilities:');
       await loadDevice(data.routerrtpCapabilities);
+     // SENDER = true;
   }catch(e){
-	  alert(e);
+	  note({ content: e, type: "error", time: 5 });
+	  SENDER = false;
 	  return;
 	  }
-    
-
-    updateButtons();
-
-    // --- get transport info ---
-    console.log('--- createProducerTransport --');
+        updateButtons();
     const params = await sendRequest({type: 'createProducerTransport'});
-    console.log('transport params:',params);
+    console.log('transport params:', params);
     producerTransport = device.createSendTransport(params.params);
-   console.log('createSendTransport:');
-
     console.log(' --- join & start publish --');
     producerTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-      console.log('--trasnport connect',dtlsParameters );
+      console.log('--trasnport connect', dtlsParameters );
      
       try{
-     await sendRequest({type: 'connectProducerTransport', transportId: producerTransport.id, dtlsParameters: dtlsParameters })
-        //.then(callback)
-        //alert(callback);
+     await sendRequest({ type: 'connectProducerTransport', transportId: producerTransport.id, dtlsParameters: dtlsParameters })
         callback();
-        //alert('suka');
        }catch(er){
-		   //alert(JSON.stringify(er));
-		   errback(er);};
+		   note({ content: er, type: "error", time: 5 });
+		   errback(er);
+		   };
     });
 
     producerTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
       console.log('--trasnport produce');
       try {
-        const { id } = await sendRequest({type: 'produce', transportId: producerTransport.id,kind, rtpParameters});
+        const { id } = await sendRequest({ type: 'produce', transportId: producerTransport.id, kind, rtpParameters });
         callback({ id });
       } catch (err) {
-      // alert(JSON.stringify(err)); 
+      note({ content: err, type: "error", time: 5 }); 
        errback(err);
       }
     });
 
     producerTransport.on('connectionstatechange', (state) => {
+		console.warn("state: ", state);
       switch (state) {
         case 'connecting':
           console.log('publishing...');
           break;
 
         case 'connected':
-          console.log('published');SENDER = true;
+          SENDER = true; 
+          note({ content: "Вы в эфире!", type: "info", time: 5 });
+          let img_data = get_screenshot(); wsend({ clientId: clientId, img_data: img_data, type: "pic", request: "mediasoup" });
+          disableElement("startMediaBtn");
+          disableElement("stopMediaBtn");
+          el.setAttribute('disabled', 1);
+          enableElement("stopTranslation");
           break;
 
+        case 'disconnected':
+        note({ content: "Disconnected!", type: "info", time: 5 });
+       if(producerTransport) producerTransport.close();
+       el.removeAttribute('disabled');
+        unpublish();
+       break;
+        
         case 'failed':
-          console.log('failed');
-          producerTransport.close();SENDER = false;
+          note({ content: "Не удалось сконнектиться с сервером!", type: "error", time: 5 });
+          if(producerTransport) producerTransport.close();
+          unpublish();
           break;
 
         default:
@@ -266,14 +298,22 @@ if (!localStream) {
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
         const trackParams = { track: videoTrack };
+        try{
         videoProducer = await producerTransport.produce(trackParams);
+	}catch(err){
+		note({ content: err, type: "error", time: 5 });
+		}
       }
     }
     if (useAudio) {
-      const audioTrack = localStream.getAudioTracks()[0];
+      const audioTrack = localStream.getAudioTracks()[ 0 ];
       if (audioTrack) {
         const trackParams = { track: audioTrack };
+        try{
         audioProducer = await producerTransport.produce(trackParams);
+	}catch(err){
+		note({ content: err, type: "error", time: 5 })
+		}
       }
     }
 
@@ -337,61 +377,65 @@ var myusername;
 function showAnketaForms(el){
 anketaForms.classList.toggle("open");	
 startMedia();
+enableElement("stopMediaBtn");
+el.setAttribute('disabled', 1);
 	}
+	disableElement('stopMediaBtn');
+	disableElement("stopTranslation");
+	/*
 	function go_ahead(el){
 		alert("Under construction!"); 
 		}
+		*/ 
 	async	function subscribe(el){
-			//if(SENDER)return;
-			 // --- get capabilities --
+			if( SENDER ) { note({ content: "Вы не можете на себя подписаться!", type: "info", time: 5 });return; }
+			try{
       const data = await sendRequest({type: 'getRouterRtpCapabilities', vid: 'subscribe'});
-      console.log('getRouterRtpCapabilities:', data);
       await loadDevice(data.routerrtpCapabilities);
-    //}
+    }catch(err){
+		note({ content: err, type: "error", time: 5 });
+		return;
+		}
 
     updateButtons();
 
-    // --- prepare transport ---
-    console.log('--- createConsumerTransport --');
-    const params = await sendRequest({type: 'createConsumerTransport'});
-    console.log('transport params:', params);
+    let params;
+    try{
+    params = await sendRequest({type: 'createConsumerTransport'});
+}catch(err){
+		note({ content: err, type: "error", time: 5 });
+		return;
+	}
     consumerTransport = device.createRecvTransport(params.params);
-    console.log('createConsumerTransport:', consumerTransport);
-
-    // --- NG ---
-    //sendRequest('connectConsumerTransport', { dtlsParameters: dtlsParameters })
-    //  .then(callback)
-    //  .catch(errback);
-
-    // --- try --- not well
-    //sendRequest('connectConsumerTransport', { dtlsParameters: params.dtlsParameters })
-    //  .then(() => console.log('connectConsumerTransport OK'))
-    //  .catch(err => console.error('connectConsumerTransport ERROR:', err));
-
-    // --- join & start publish --
+  
     consumerTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-      console.log('--consumer trasnport connect');
       try{
       await sendRequest({type: 'connectConsumerTransport', dtlsParameters: dtlsParameters })
         callback()
-        }catch(er){errback(er);}
-
-      //consumer = await consumeAndResume(consumerTransport);
+        }catch(er){
+			note({ content: er, type: "error", time: 5 });
+			errback(er);
+			}
     });
 
     consumerTransport.on('connectionstatechange', (state) => {
+		console.log("state: ", state);
       switch (state) {
         case 'connecting':
           console.log('subscribing...');
           break;
 
         case 'connected':
-          console.log('subscribed');
+          note({ content: "Вы подключились к трансляции!", type: "info", time: 5 });
+          wsend({ type: "onconsume", request: "mediasoup" })
           break;
-
+        case 'disconnected':
+        note({ content: 'Disconnected!', type: 'info', time: 5 });
+        break;
+        
         case 'failed':
-          console.log('failed');
-          producerTransport.close();
+          note({ content: 'Failed to subscribe!', type: "error", time: 5 });
+        //  producerTransport.close();
           break;
 
         default:
@@ -407,7 +451,12 @@ startMedia();
 
 
  async function consumeAndResume(transport, kind) {
-    const consumer = await consume(consumerTransport, kind);
+    let consumer;
+    try{
+		consumer = await consume(consumerTransport, kind);
+	}catch(err){
+		note({ content: err, type: "error", time: 5 });
+		}
     if (consumer) {
       console.log('-- track exist, consumer ready. kind=' + kind);
       console.log('----- consumer: ', consumer);
@@ -421,7 +470,7 @@ startMedia();
            // alert('resume ok');
             return consumer;
           }catch(err){
-            console.error('resume ERROR:', err);
+            note({ content: err, type: "error", time: 5 });
             return consumer;
           }
       }
@@ -439,31 +488,26 @@ async function loadDevice(routerRtpCapabilities) {
       device = new MediasoupClient.Device();
     } catch (error) {
       if (error.name === 'UnsupportedError') {
-        console.error('browser not supported');
+       note({ content: 'Browser not supported!', type: "error", time: 5 });
       }
     }
+    try{
     await device.load({ routerRtpCapabilities });
+}catch(err){
+	note({ content: err, type: "error", time: 5 });
+	}
   }
   
   async function consume(transport, trackKind) {
     console.log('--start of consume --kind=' + trackKind);
     const { rtpCapabilities } = device;
-    //const data = await socket.request('consume', { rtpCapabilities });
     var data;
     try{
     data = await sendRequest({type: 'consume',  rtpCapabilities: rtpCapabilities, kind: trackKind })
       }catch(err){
-        console.error('consume ERROR:', err);
+        note({ contrent: 'Consume ERROR: ' + err, type: "error", time: 5 });
       };
- /*   const {
-      producerId,
-      id,
-      kind,
-      rtpParameters,
-    } = data.params;
-    */
-    console.log("data.params:^^^^^6666 ", data.params);
-console.log("DATA&&&&&&&&&&&&&&&&&&&&: ", data.params.producerId);
+ 
     const producerId = data.params.producerId;
     const id = data.params.id;
     const kind = data.params.kind;
@@ -471,24 +515,24 @@ console.log("DATA&&&&&&&&&&&&&&&&&&&&: ", data.params.producerId);
     
     if (producerId) {
       let codecOptions = {};
-      const consumer = await transport.consume({
+      let consumer;
+      try{
+		  consumer = await transport.consume({
         id,
         producerId,
         kind,
         rtpParameters,
         codecOptions,
       });
-      //const stream = new MediaStream();
-      //stream.addTrack(consumer.track);
-
+}catch(err){
+	note({ content: err, type: "error", time: 5 });
+	return null;
+	}
       addRemoteTrack(clientId, consumer.track);
-
-      console.log('--end of consume');
-      //return stream;
 
       return consumer;
     }else {
-      console.warn('--- remote producer NOT READY');
+      note({ content: 'Remote producer NOT READY', type: "info", time: 5 });
 
       return null;
     }
@@ -498,6 +542,7 @@ console.log("DATA&&&&&&&&&&&&&&&&&&&&: ", data.params.producerId);
 
 
   function unpublish() {
+	  if( !SENDER ) { return; }
 	  wsend({type: "stop", request: "mediasoup"});
     if (localStream) {
       pauseVideo(localVideo);
@@ -516,11 +561,13 @@ console.log("DATA&&&&&&&&&&&&&&&&&&&&: ", data.params.producerId);
       producerTransport.close(); // localStream will stop
       producerTransport = null;
     }
-
-   // disconnectSocket();
     updateButtons();
-     updateButtons2();
+    // updateButtons2();
+     SENDER = false;
+     if( vV ) vV.textContent = 0;
+      disableElement("stopTranslation");
   }
+  
     function disconnect2() {
     if (videoConsumer) {
       videoConsumer.close();
@@ -535,11 +582,8 @@ console.log("DATA&&&&&&&&&&&&&&&&&&&&: ", data.params.producerId);
       consumerTransport.close();
       consumerTransport = null;
     }
-
-   // removeAllRemoteVideo();
-
-   // disconnectSocket();
    // updateButtons2();
+  
   }
 
 
@@ -587,4 +631,33 @@ function broadcasting(el){
 	alert("To be implemented.");
 	}
 */
+function get_screenshot(){
+let cnv = document.createElement('canvas');
+let w = 180;
+let h = 150;
+cnv.width = w;
+cnv.height = h;
+var c = cnv.getContext('2d');
+c.drawImage(localVideo, 0, 0, w, h);
+var img_data = cnv.toDataURL('image/png', 0.5);
+cnv.remove();
+return img_data;
+}
+localVideo.onloadedmetadata = function(){
+startTranslation.removeAttribute('disabled');
+//enableElement('stopMediaBtn');
+knopkaSubscribe.style.display = "none";	
+}
+function enableElement(id) {
+    let element = document.getElementById(id);
+    if (element) {
+      element.removeAttribute('disabled');
+    }
+  }
 
+  function disableElement(id) {
+    let element = document.getElementById(id);
+    if (element) {
+      element.setAttribute('disabled', '1');
+    }
+  }
