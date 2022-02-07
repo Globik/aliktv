@@ -590,7 +590,7 @@ function unpublish() {
     SENDER = false;
     if (vV) vV.textContent = 0;
     disableElement("stopTranslation");
-    note({conyent: "Вы закончили трансляцию.", type: "info", time: 5});
+    note({content: "Вы закончили трансляцию.", type: "info", time: 5});
 }
 
 function disconnect2() {
