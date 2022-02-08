@@ -6,6 +6,7 @@ const html_footer = require('./html_footer');
 const {get_meta} = require('./get_meta');
 const redact_proto = require("./redact_proto.js");
 const {check_age, site_domain} = require('../config/app.json');
+const {disqus} = require('../libs/disqus.js');
 
 
 const main_page = function (n) {
@@ -81,7 +82,7 @@ ${n.banner && n.banner.length ? `<div id="haupt-banner">${get_banner(n.banner)}<
 <section id="sectionPerson" itemscope itemtype="http://schema.org/Person">
 <div id="personFotoContainer" >
 <img itemprop="image" 
-src="${process.env.DEVELOPMENT=='yes'?'/images/ich.jpg':`https://${site_domain}/images/ich.jpg`}" alt="Программист Алик Гафаров" >
+src="${process.env.DEVELOPMENT == 'yes' ? '/images/ich.jpg' : `https://${site_domain}/images/ich.jpg`}" alt="Программист Алик Гафаров" >
 </div>
 <div id="personInfo">
 <header itemprop="name"><strong>Гафаров Алик</strong></header>
@@ -128,7 +129,7 @@ ${buser && buser.brole == 'superadmin' ? redact_proto.redact_proto("/api/save_po
 ${buser && buser.brole == "superadmin" ? "<script src='/js/redact.js'></script>" : ""}
 <hr>
 Сейчас на сайте <span id="spanWhosOn">0</span> человек.<hr>
-
+${disqus({page_id: "main"})}
 
 
 </div></main>

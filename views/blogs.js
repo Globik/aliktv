@@ -5,6 +5,7 @@ const html_nav_menu = require('./html_nav_menu');
 const html_admin_nav_menu = require('./html_admin_nav_menu');
 const html_footer = require('./html_footer');
 const icons_menu = require('./icons_menu');
+const {site_domain} = require('../config/app.json');
 
 const blogs = function(n){
 const buser = n.user;
@@ -34,7 +35,7 @@ ${getPaginator(n)}
 
 </div></main>
  <script src="/js/blog.js"></script>
-<footer id="footer">${html_footer.html_footer({})}</footer></body></html>`;}
+<footer id="footer">${html_footer.html_footer({})}</footer><script id="dsq-count-scr" src="//chelikon.disqus.com/count.js" async></script></body></html>`;}
 
 module.exports = {blogs};
 
@@ -77,9 +78,10 @@ n.posts.forEach(function(el,i){
 s+=`<div class="articles-container"><h3><a href="/ru/${el.slug}">${el.title}</a></h3><span class="d-author">${el.auth}</span>,
  <span class="d-date">${moment(el.cr_at).format('YYYY-DD-MM')}</span>
 	<article>${el.body.substring(0,500)}</article>
-	<div><a href="/ru/${el.slug}">Читать</a></div>
+	<div class="underBlogi"><a class="a-links" href="/ru/${el.slug}">Читать</a><span class="span-comments">Коментариев:&nbsp;</span><a href="https://${site_domain}/ru/${el.slug}#disqus_thread" data-disqus-identifier="${el.id}">0</a></div>
 	${n.user&&n.user.brole=="superadmin"?`<br><br><br><button data-bid="${el.id}" onclick="rem(this);">delete</button>`:''}</div>`;
-	})	
+	})
+// <a href="http://example.com/article1.html#disqus_thread" data-disqus-identifier="article_1_identifier">First article</a>
 	return s;
 	}
 
