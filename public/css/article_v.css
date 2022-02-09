@@ -1,22 +1,68 @@
-textarea{height:500px;width:100%;}
-#rMeta{height:100px;}
-#txtContainer{display:none;}
+textarea {
+    height: 500px;
+    width: 100%;
+}
 
-h1{line-height:1.5;
-margin-top:10px;
-margin-bottom:10px;
+#rMeta {
+    height: 100px;
 }
-.d-date,.d-author{
-font-size:0.7rem;
-line-height:2.5;
+
+#txtContainer {
+    display: none;
 }
-button, input{
-font-weight:bold;
+
+h1 {
+    line-height: 1.5;
+    margin-top: 10px;
+    margin-bottom: 10px;
 }
-article{margin-bottom:10px;}
-p{line-height:1.7;}
-.afterpost{margin-top:50px;ackground:red;}
-#avautor{height:150px;}
-#fotoleft,#afterfoto{display:inline-block;}
-#fotoleft{ackground:yellow;width:160px;}
-#afterfoto{ackground:green;vertical-align:top;width: calc(100% - 160px);font-size:16px;line-height:1.5;}
+
+.d-date, .d-author {
+    font-size: 0.7rem;
+    line-height: 2.5;
+}
+
+button, input {
+    font-weight: bold;
+}
+
+article {
+    margin-bottom: 10px;
+    padding: 20px;
+}
+
+#articleView {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    line-height: 1.6;
+}
+
+p {
+    line-height: 1.7;
+}
+
+.afterpost {
+    margin-top: 50px;
+    ackground: red;
+}
+
+#avautor {
+    height: 150px;
+}
+
+#fotoleft, #afterfoto {
+    display: inline-block;
+}
+
+#fotoleft {
+    ackground: yellow;
+    width: 160px;
+}
+
+#afterfoto {
+    ackground: green;
+    vertical-align: top;
+    width: calc(100% - 160px);
+    font-size: 16px;
+    line-height: 1.5;
+}

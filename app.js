@@ -25,12 +25,9 @@ const render = require('./libs/render.js');
 const handleMediasoup = require("./libs/mediasoup_help.js")
 const serve = require('koa-static');
 const session = require('koa-session');
-const koaCors = require('koa-cors')
 const nodemailer = require('nodemailer');
-
 const pubrouter = require('./routes/pubrouter.js');
 const adminrouter = require('./routes/adminrouter.js');
-
 const {meta, warnig, site_name} = require('./config/app.json');
 var DB_URL = 'postgress://globi:globi@127.0.0.1:5432/globi';
 
@@ -142,10 +139,7 @@ app.use(async (ctx, next) => {
     await next();
 })
 
-app.use(pubrouter.routes()).use(pubrouter.allowedMethods()).use(koaCors({
-    origin: true,
-    credentials: true
-}));
+app.use(pubrouter.routes()).use(pubrouter.allowedMethods());
 
 app.use(adminrouter.routes()).use(adminrouter.allowedMethods());
 

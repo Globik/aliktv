@@ -86,7 +86,7 @@ ${n.banner && n.banner.length ? `<div id="haupt-banner">${get_banner(n.banner)}<
 <div id="personInfo">
 <header itemprop="name"><strong>Гафаров Алик</strong></header>
 <p>
-<span itemprop="jobTitle">Веб-разработчик, WebRTC-инженер, бизнес-консультант в сфере <strong>монетизаций видеостримов</strong>.</span> 
+<span itemprop="jobTitle">Веб-разработчик, WebRTC-специалист, бизнес-консультант в сфере <strong>монетизаций видеостримов</strong>.</span> 
 <br><a itemprop="email" href="mailto:globalikslivov@gmail.com">globalikslivov@gmail.com</a>
 <br>Телеграм: <a itemprop="url" href="https://t.me/Globik2">@Globik2</a>
 </p>
