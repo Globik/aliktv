@@ -25,7 +25,7 @@ const render = require('./libs/render.js');
 const handleMediasoup = require("./libs/mediasoup_help.js")
 const serve = require('koa-static');
 const session = require('koa-session');
-
+const koaCors = require('koa-cors')
 const nodemailer = require('nodemailer');
 
 const pubrouter = require('./routes/pubrouter.js');
@@ -113,7 +113,8 @@ app.use(async (ctx, next) => {
             xirsys = xir;
             ctx.state.xirsys = xirsys;
             try {
-                await pool.query(`update prim_adr set xir=$1`, [JSON.stringify(xirsys)])
+                await pool.query(`update prim_adr
+                                  set xir=$1`, [JSON.stringify(xirsys)])
             } catch (e) {
                 console.log(e);
             }
@@ -141,7 +142,10 @@ app.use(async (ctx, next) => {
     await next();
 })
 
-app.use(pubrouter.routes()).use(pubrouter.allowedMethods());
+app.use(pubrouter.routes()).use(pubrouter.allowedMethods()).use(koaCors({
+    origin: true,
+    credentials: true
+}));
 
 app.use(adminrouter.routes()).use(adminrouter.allowedMethods());
 
