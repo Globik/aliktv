@@ -81,14 +81,14 @@ ${n.banner && n.banner.length ? `<div id="haupt-banner">${get_banner(n.banner)}<
 <div id="right">
 <section id="sectionPerson" itemscope itemtype="http://schema.org/Person">
 <div id="personFotoContainer" >
-<img itemprop="image" 
-src="${process.env.DEVELOPMENT == 'yes' ? '/images/ich.jpg' : `https://${site_domain}/images/ich.jpg`}" alt="Программист Алик Гафаров" >
+<img itemprop="image" src="${process.env.DEVELOPMENT == 'yes' ? '/images/ich2.png' : `https://${site_domain}/images/ich2.png`}" alt="Программист Алик Гафаров" >
 </div>
 <div id="personInfo">
 <header itemprop="name"><strong>Гафаров Алик</strong></header>
 <p>
 <span itemprop="jobTitle">Веб-разработчик, WebRTC-инженер, бизнес-консультант в сфере <strong>монетизаций видеостримов</strong>.</span> 
-<br><br><a itemprop="email" href="mailto:globalikslivov@gmail.com">globalikslivov@gmail.com</a>
+<br><a itemprop="email" href="mailto:globalikslivov@gmail.com">globalikslivov@gmail.com</a>
+<br>Телеграм: <a itemprop="url" href="https://t.me/Globik2">@Globik2</a>
 </p>
 </div>
 </section>

@@ -1,0 +1,15 @@
+<html>
+<body>
+<canvas id="cnv"></canvas>
+<script>
+    var ctx = cnv.getContext("2d");
+    var img = new Image();
+    img.src = "../public/images/ich2.png";
+    img.onload = function() {
+        cnv.width = 300;
+        cnv.height = 300;
+        ctx.drawImage(img, 0, 0, 300, 400);
+    }
+    </script>
+</body>
+</html>
