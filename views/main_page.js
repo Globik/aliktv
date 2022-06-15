@@ -3,29 +3,31 @@ const html_nav_menu = require('./html_nav_menu');
 const icons_menu = require('./icons_menu');
 const html_admin_nav_menu = require('./html_admin_nav_menu');
 const html_footer = require('./html_footer');
-const {get_meta} = require('./get_meta');
+const {get_meta}=require('./get_meta');
 const redact_proto = require("./redact_proto.js");
 const {check_age, site_domain} = require('../config/app.json');
 const {disqus} = require('../libs/disqus.js');
-
+function abba(){
+		var x=1;
+}
 
 const main_page = function (n) {
-    const buser = n.user;
-    n.current = "main";
+	const buser = n.user;
+	n.current = "main";
 
-    return `<!DOCTYPE html><html lang="en"><!-- main_page.js -->
+	return `<!DOCTYPE html><html lang="en"><!-- main_page.js -->
 <head>${html_head.html_head({
-        title: `${n.site} - webcam site для видеообщений`,
-        meta:
-            get_meta({
-                url: n.meta.url,
-                image: n.meta.image,
-                site_name: n.meta.site_name,
-                title: n.meta.main_page.title,
-                description: n.meta.main_page.description
-            }),
-        csslink: "/css/main2.css", cssl: ["/css/main_page.css", "/css/mediasoup.css"], luser: buser
-    })}
+		title: `${n.site} - webcam site для видеообщений`,
+		meta:
+			get_meta({
+				url: n.meta.url,
+				image: n.meta.image,
+				site_name: n.meta.site_name,
+				title: n.meta.main_page.title,
+				description: n.meta.main_page.description
+			}),
+		csslink: "/css/main2.css", cssl: ["/css/main_page.css", "/css/mediasoup.css"], luser: buser
+	})}
 <!-- https://app.onesignal.com -->
 ${process.env.DEVELOPMENT == "yes" ? '' : '<script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>'}
 <script src="js/mediasoup-client.js"></script>
@@ -81,12 +83,12 @@ ${n.banner && n.banner.length ? `<div id="haupt-banner">${get_banner(n.banner)}<
 <div id="right">
 <section id="sectionPerson" itemscope itemtype="http://schema.org/Person">
 <div id="personFotoContainer" >
-<img itemprop="image" src="${process.env.DEVELOPMENT == 'yes' ? '/images/ich2.png' : `https://${site_domain}/images/ich2.png`}" alt="Программист Алик Гафаров" >
+<img itemprop="image" src="${process.env.DEVELOPMENT == 'yes' ? '/images/me.jpeg' : `https://${site_domain}/images/me.jpeg`}" alt="Программист Алик Гафаров" >
 </div>
 <div id="personInfo">
 <header itemprop="name"><strong>Гафаров Алик</strong></header>
 <p>
-<span itemprop="jobTitle">Веб-разработчик, WebRTC-специалист, бизнес-консультант в сфере <strong>монетизаций видеостримов</strong>.</span> 
+<span itemprop="jobTitle">Веб-разработчик, WebRTC-специалист, бизнес-консультант в сфере <strong>монетизаций видеостримов</strong>.</span>
 <br><a itemprop="email" href="mailto:globalikslivov@gmail.com">globalikslivov@gmail.com</a>
 <br>Телеграм: <a itemprop="url" href="https://t.me/Globik2">@Globik2</a>
 </p>

@@ -429,7 +429,7 @@ const mediasoupOptions = {
   worker: {
     rtcMinPort: 10000,
     rtcMaxPort: 10100,
-    logLevel: 'warn',
+    logLevel: 'debug',
     logTags: [
       'info',
       'ice',
@@ -493,16 +493,14 @@ async function startWorker() {
   const mediaCodecs = mediasoupOptions.router.mediaCodecs;
   worker = await mediasoup.createWorker();
   router = await worker.createRouter({ mediaCodecs });
-  //producerTransport = await router.createWebRtcTransport(mediasoupOptions.webRtcTransport);
-  router.on('workerclose', function(){
-	  console.log('worker closed so router closed')
-	  })
-	  router.observer.on('close', function(){console.log('router closed')})
-	  worker.observer.on('close', function(){
-		  console.log('worker closed')
-		  })
+  worker.fuck();
+ router.on('workerclose', function(){ console.log('worker closed so router closed') })
+ //router.observer.on('close', function(){console.log('router closed')})
+	  worker.observer.on('close', function(){console.log('worker closed')})
   console.log('-- mediasoup worker start. --')
 }catch(e){console.log(e);}
+
+//worker.close();
 }
 
 // startWorker();

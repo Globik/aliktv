@@ -15,170 +15,172 @@ align-items:stretch;
 #sat{margin-left:40px;}
 */
 canvas#canvasi {
-    margin: 0 auto;
-    border: 1px solid lightblue;
+  margin: 0 auto;
+  border: 1px solid lightblue;
 }
 
 h2 {
-    text-align: center;
+  text-align: center;
 }
 
 .ahero {
-    color: purple; /*rgb(233,76,129);*/
-    text-decoration: none;
-    border: 1px solid purple;
-    cursor: pointer;
-    padding: 20px;
+  color: purple; /*rgb(233,76,129);*/
+  text-decoration: none;
+  border: 1px solid purple;
+  cursor: pointer;
+  padding: 20px;
 }
 
 #mainArticle {
-    background: rgba(38, 214, 35, 0.2);
-    padding: 1em;
-    color: rgb(40, 30, 11);
+  background: rgba(38, 214, 35, 0.2);
+  padding: 1em;
+  color: rgb(40, 30, 11);
 }
 
 #newUserSection {
-    background: rgb(202, 230, 199);
-    padding: 1em;
+  background: rgb(202, 230, 199);
+  padding: 1em;
 }
 
 p {
-    line-height: 1.7
+  line-height: 1.7;
 }
 
-#onlineSection, #onlineVideo {
-    border: 1px solid rgb(85, 165, 159);
-    width: 100%;
-    height: auto;
-    display: block;
-    padding: 20px 20px 30px 20px;
-
+#onlineSection,
+#onlineVideo {
+  border: 1px solid rgb(85, 165, 159);
+  width: 100%;
+  height: auto;
+  display: block;
+  padding: 20px 20px 30px 20px;
 }
 
 #onlineSection {
-    background: rgb(85, 165, 159);
+  background: rgb(85, 165, 159);
 }
 
 #onlineVideo {
-    background: rgb(223, 235, 202);
+  background: rgb(223, 235, 202);
 }
 
-#onlineContainer, #videoContainer, #userList {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    height: auto;
+#onlineContainer,
+#videoContainer,
+#userList {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  height: auto;
 }
 
 .imageHalter {
-    width: 300px;
-    height: 150px;
-    overflow: hidden;
+  width: 300px;
+  height: 150px;
+  overflow: hidden;
 }
 
-#onlineHeader, #onlineVideoHeader {
-    font-weight: bold;
-    font-size: 2em;
-    text-align: center;
-    margin-bottom: 30px;
+#onlineHeader,
+#onlineVideoHeader {
+  font-weight: bold;
+  font-size: 2em;
+  text-align: center;
+  margin-bottom: 30px;
 }
 
 .img-online-container {
-    display: inline-block;
-    flex: auto;
-    height: 100px;
-    width: 250px;
-    text-align: center;
-    margin: 11px;
-    position: relative;
+  display: inline-block;
+  flex: auto;
+  height: 100px;
+  width: 250px;
+  text-align: center;
+  margin: 11px;
+  position: relative;
 }
 
 .videodiv {
-    width: 200px;
-    display: inline-block;
-    flex: auto;
+  width: 200px;
+  display: inline-block;
+  flex: auto;
 }
 
 .videodiv video {
-    width: 100%;
+  width: 100%;
 }
 
 .img-online {
-    height: 200px;
-    isplay: block;
-    osition: relative;
+  height: 200px;
+  isplay: block;
+  osition: relative;
 }
 
 .img-footer {
-    margin-top: -2px;
-    font-size: 0.6rem;
-    position: relative;
+  margin-top: -2px;
+  font-size: 0.6rem;
+  position: relative;
 }
 
 .newuserdiv {
-    margin: 20px;
-    background: rgb(202, 230, 233);
-    padding: 1em;
-    border: 1px solid green;
+  margin: 20px;
+  background: rgb(202, 230, 233);
+  padding: 1em;
+  border: 1px solid green;
 }
 
 .seeAllusers {
-    text-align: center;
+  text-align: center;
 }
 
 @keyframes puls {
-    from {
-        background: pink;
-    }
-    to {
-        background: red;
-    }
+  from {
+    background: pink;
+  }
+  to {
+    background: red;
+  }
 }
 
 .vroomers {
-    margin: 10px;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.4);
-    position: relative;
+  margin: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.4);
+  position: relative;
 }
 
 .indicator {
-    width: 10px;
-    height: 10px;
-    position: absolute;
-    right: 15px;
-    top: 15px;
-    border-radius: 5px;
+  width: 10px;
+  height: 10px;
+  position: absolute;
+  right: 15px;
+  top: 15px;
+  border-radius: 5px;
 }
 
 .indicator.red {
-    background: red;
-    animation-name: puls;
-    animation-duration: 1s;
-    animation-direction: alternate;
-    animation-iteration-count: infinite;
+  background: red;
+  animation-name: puls;
+  animation-duration: 1s;
+  animation-direction: alternate;
+  animation-iteration-count: infinite;
 }
 
 .indicator.green {
-    background: green;
+  background: green;
 }
 
 .timecl {
-    font-size: 0.7rem;
+  font-size: 0.7rem;
 }
 
 .onlineVideo {
-
 }
 
 .videovroomers {
-    width: 250px;
+  width: 250px;
 }
 
 span[itemprop="uploadDate"] {
-    font-size: 0;
-    color: rgba(0, 0, 0, 0);
+  font-size: 0;
+  color: rgba(0, 0, 0, 0);
 }
 /*
 p[itemprop="description"] {
@@ -188,29 +190,29 @@ p[itemprop="description"] {
 }
 */
 @media screen and (max-width: 750px) {
-    canvas#canvasi {
-        display: none;
-    }
+  canvas#canvasi {
+    display: none;
+  }
 
-    .videodiv {
-        width: 100%;
-    }
+  .videodiv {
+    width: 100%;
+  }
 
-    .videodiv video {
-        width: 100%;
-    }
+  .videodiv video {
+    width: 100%;
+  }
 }
 
 @media screen and (max-width: 320px) {
-    .ahero {
-        display: inline-block;
-    }
+  .ahero {
+    display: inline-block;
+  }
 
-    .videodiv {
-        width: 100%;
-    }
+  .videodiv {
+    width: 100%;
+  }
 
-    .videodiv video {
-        width: 100%;
-    }
+  .videodiv video {
+    width: 100%;
+  }
 }
