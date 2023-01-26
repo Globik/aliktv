@@ -1,0 +1,289 @@
+<html>
+	<body>
+		<div>
+	<audio id="gum" atoplay unmutd></audio>
+	<canvas id='recorded' style='border:1px solid green;width:400px; height:100px;'></canvas>
+	
+	</div>
+
+    <div>
+        <button id="start">Start microphone</button>
+        <button id="record" disabled>Start Recording</button>
+        <button id="play" disabled>Play</button>
+        <button id="download" disabled>Download</button>
+    </div>
+<!--
+    <div>
+        Recording format: <select id="codecPreferences" disabled></select>
+    </div>
+    <div>
+        <h4>Media Stream Constraints options</h4>
+        <p>Echo cancellation: <input type="checkbox" id="echoCancellation"></p>
+    </div>
+-->
+    <div>
+        <span id="errorMsg"></span>
+    </div>
+	
+	<script>
+		
+		'use strict';
+
+
+
+let mediaRecorder;
+let recordedBlobs;
+let cnv2 = document.getElementById("recorded");
+let ctx2 = cnv2.getContext("2d");
+
+ctx2.fillStyle='white';
+ctx2.fillRect(0,0, cnv2.width, cnv2.height);
+
+let audioCtx, flag2 = false, track2, analyser2,  x2 = 0;
+
+
+const errorMsgElement = document.querySelector('span#errorMsg');
+const recordedVideo = gum;
+const recordButton = document.querySelector('button#record');
+recordButton.addEventListener('click', () => {
+  if (recordButton.textContent === 'Start Recording') {
+    startRecording();
+  } else {
+    stopRecording();
+    recordButton.textContent = 'Start Recording';
+    playButton.disabled = false;
+    downloadButton.disabled = false;
+    
+  }
+});
+
+const playButton = document.querySelector('button#play');
+playButton.addEventListener('click', () => {
+  const mimeType = 'audio/webm';
+  const superBuffer = new Blob(recordedBlobs, {type: mimeType});
+  recordedVideo.src = null;
+  recordedVideo.srcObject = null;
+  recordedVideo.src = window.URL.createObjectURL(superBuffer);
+ 
+  recordedVideo.play();
+  
+	ctx2.fillStyle='white';
+    ctx2.fillRect(0,0, cnv2.width, cnv2.height);
+  recordedVideo.onplay = function(){
+	  //alert('onplay')
+	  getSound2();
+	  
+  }
+});
+
+	
+
+const downloadButton = document.querySelector('button#download');
+downloadButton.addEventListener('click', () => {
+  const blob = new Blob(recordedBlobs, {type: 'audio/webm'});
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = 'test.wav';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }, 100);
+});
+
+function handleDataAvailable(event) {
+  console.log('handleDataAvailable', event);
+  if (event.data && event.data.size > 0) {
+    recordedBlobs.push(event.data);
+  }
+}
+
+function getSupportedMimeTypes() {
+  const possibleTypes = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=h264,opus',
+    'video/mp4;codecs=h264,aac',
+  ];
+  return possibleTypes.filter(mimeType => {
+    return MediaRecorder.isTypeSupported(mimeType);
+  });
+}
+
+function startRecording() {
+  recordedBlobs = [];
+ // const mimeType = codecPreferences.options[codecPreferences.selectedIndex].value;
+  const options = {mimeType: 'audio/webm'};
+
+  try {
+    mediaRecorder = new MediaRecorder(window.stream, options);
+  } catch (e) {
+    console.error('Exception while creating MediaRecorder:', e);
+    errorMsgElement.innerHTML = `Exception while creating MediaRecorder: ${JSON.stringify(e)}`;
+    return;
+  }
+
+  console.log('Created MediaRecorder', mediaRecorder, 'with options', options);
+  recordButton.textContent = 'Stop Recording';
+  playButton.disabled = true;
+  downloadButton.disabled = true;
+ // codecPreferences.disabled = true;
+  mediaRecorder.onstop = (event) => {
+    console.log('Recorder stopped: ', event);
+    console.log('Recorded Blobs: ', recordedBlobs);
+  };
+  mediaRecorder.ondataavailable = handleDataAvailable;
+  mediaRecorder.start();
+  console.log('MediaRecorder started', mediaRecorder);
+}
+
+function stopRecording() {
+  mediaRecorder.stop();
+ // gum.end();
+}
+
+function handleSuccess(stream) {
+  recordButton.disabled = false;
+  console.log('getUserMedia() got stream:', stream);
+  window.stream = stream;
+
+  const gumVideo = document.querySelector('audio#gum');
+  gumVideo.srcObject = stream;
+
+}
+
+async function init(constraints) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    handleSuccess(stream);
+  } catch (e) {
+    console.error('navigator.getUserMedia error:', e);
+    errorMsgElement.innerHTML = `navigator.getUserMedia error:${e.toString()}`;
+  }
+}
+
+document.querySelector('button#start').addEventListener('click', async () => {
+  document.querySelector('button#start').disabled = true;
+
+  const constraints = {
+    audio: {
+      echoCancellation: {exact: true}
+    }
+    
+  };
+ console.log('Using media constraints:', constraints);
+  await init(constraints);
+});
+		
+		async function getSound2(){
+		ctx2.save()	
+	ctx2.fillStyle='white';
+    ctx2.fillRect(0,0, cnv2.width, cnv2.height);
+    ctx2.restore()
+			audioCtx = new AudioContext();
+			await audioCtx.resume();
+
+
+	if(!flag2)ctx2.clearRect(0, 0, cnv2.width, cnv2.height);
+
+ 
+ flag2 = true;
+if(!track2){
+		track2 = audioCtx.createMediaElementSource(document.getElementById("gum"));
+		 analyser2 = audioCtx.createAnalyser();
+		 analyser2.smoothingTimeConstant = 1.0;
+		 track2.connect(analyser2);
+		 analyser2.connect(audioCtx.destination);
+    }
+
+
+	analyser2.fftSize = 2048;
+
+	var bufferLength2 =  analyser2.frequencyBinCount;
+	console.log(bufferLength2);
+	var dataArray2 = new Uint8Array(bufferLength2);
+
+
+
+draw2();
+
+
+var drawVisual2;
+		
+		
+		
+		
+function draw2(){
+
+	drawVisual2 = requestAnimationFrame(draw2);
+	//analyser.getByteFrequencyData(dataArray);
+	analyser2.getByteTimeDomainData(dataArray2);
+
+	let d = dataArray2;
+	
+	var sliceWidth2 =(cnv2.width)/ bufferLength2;
+	
+	
+
+	ctx2.lineWidth = 1;
+	ctx2.strokeStyle = "red";
+	
+	ctx2.beginPath();
+
+	
+	//  for (var i = 0; i < bufferLength2; i+=(bufferLength2 - 1)/2.0) {
+for (var i = 0; i < bufferLength2; i+= cnv2.height){
+		  const v2 = (d[i]) / 128.0;
+			const y2 = (v2 * cnv2.height) / 2.0;
+
+  if (i === 0) {
+   ctx2.moveTo(x2, y2);
+ 
+  } else {
+    ctx2.lineTo(x2, y2);
+  
+  }
+
+  x2 += sliceWidth2;
+}
+	ctx2.stroke();
+}
+
+gum.onended = function(e){
+	
+	cancelAnimationFrame(drawVisual2);
+	x2 = 0;
+   
+	flag2 = false;
+}
+
+}
+
+
+
+		
+</script>
+
+<form id="ich">
+<input name="price" value="10" type="hidden">
+<input name="myname" type="text"  value="alik">
+<button type="submit">send</button>
+</form>
+
+<script>
+ich.addEventListener("submit", function(ev){
+	ev.preventDefault();
+	alert(ev.target.price.value+" : "+ ev.target.myname.value)
+},false)
+	</script>
+
+
+
+
+
+
+	</body>
+	</html>

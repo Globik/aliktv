@@ -309,7 +309,9 @@ pub.get("/ru/:slug", async ctx => {
 
     ctx.body = await ctx.render('article_v', {result: result.rows[0]})
 })
-
+pub.get('/musik' , async ctx=>{
+	ctx.body = await ctx.render('musik', {});
+})
 module.exports = pub;
 
 function auth(ctx, next) {

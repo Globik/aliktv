@@ -122,8 +122,224 @@ ${n.vroom ? `<div id="mainpanel">${n.vroom.descr}</div>` : ''}
 </div>
 
 </section>
+<canvas height="400" id="meter" width="100"></canvas>
+
+<audio controls id="mum" src="/musik/ex.ogg">&nbsp;</audio>
+<button id="sw">start</button>
+<script>
+
+var cnv=document.getElementById('meter');
+var c=cnv.getContext('2d');
 
 
+var w=100;
+var h=400;
+var dau=document.getElementById('mum');
+//var au=new Audio();
+var audio;
+dau.onplay=dawaj;
+ function init(){
+audio=new window.AudioContext();
+
+}
+
+document.querySelector('#sw').addEventListener('click', dawaj, false);
+
+function dawaj(){
+	init();
+  audio.resume().then(() => {
+    console.log('Playback resumed successfully');
+    //init();
+    //requestAnimationFrame(draw);
+    dau.play();
+    
+var analyser=audio.createAnalyser();//ScriptProcessor(1024,1,1);
+
+var source=audio.createMediaElementSource(dau);
+
+analyser.fftSize = 1024;
+var bufferLength = analyser.fftSize;
+console.log(bufferLength);
+var dataArray = new Float32Array(bufferLength);
+
+
+analyser.getFloatTimeDomainData(dataArray);
+
+c.fillStyle='#555';
+c.fillRect(0,0,w,h);
+
+
+source.connect(audio.destination);
+source.connect(analyser);
+analyser.connect(audio.destination);
+
+
+analyser.onaudioprocess=function(e){
+	//alert(1);
+	console.log('process');
+		
+var out=e.outputBuffer.getChannelData(0);
+var int=e.inputBuffer.getChannelData(0);
+var max=0;
+for(var i=0;i<int.length;i++){
+out[i]=0;
+max=int[i]>max?int[i]:max;
+}
+var db=20*Math.log(Math.max(max,Math.pow(10,-72/20)))/Math.LN10;
+var grad=c.createLinearGradient(w/10,h*.2,w/10,h*.95);
+grad.addColorStop(0,'red');
+grad.addColorStop(-6/-72,'yellow');
+grad.addColorStop(1,'green');
+c.fillStyle='#555';
+c.fillRect(0,0,w,h);
+c.fillStyle=grad;
+c.fillRect(w/10,h*.8*(db/-72),w*8/10,(h*.95)-h*.8*(db/-72));
+c.fillStyle='white';
+c.font='Arial 12pt';
+c.fillText(Math.round(db*100)/100+'dB',w/2,h-h*.025);
+}
+  });
+}
+
+</script>
+	audio id="audio2" controls src="/musik/ex.ogg"><canvas id="cnv2"></canvas>
+<script>
+
+
+// Set up audio context
+//window.AudioContext = window.AudioContext || window.webkitAudioContext;
+//const audioContext = new AudioContext();
+var audioCtx, audioCtx2;
+/**
+ * Retrieves audio from an external source, the initializes the drawing function
+ * @param {String} url the url of the audio we'd like to fetch
+ */
+const drawAudio = function(url){
+	//alert('draw');
+  fetch(url)
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => draw(normalizeData(filterData(audioBuffer))));
+}
+/*
+var audio = document.getElementById('audio');
+audio.play();
+    var ctx = new AudioContext();
+    var analyser = ctx.createAnalyser();
+    var audioSrc = ctx.createMediaElementSource(audio);
+    // we have to connect the MediaElementSource with the analyser 
+    audioSrc.connect(analyser);
+    analyser.connect(ctx.destination);
+    // we could configure the analyser: e.g. analyser.fftSize (for further infos read the spec)
+    // analyser.fftSize = 64;
+    // frequencyBinCount tells you how many values you'll receive from the analyser
+    var frequencyData = new Uint8Array(analyser.frequencyBinCount);
+    */
+   // var audioCtx;
+    function binit(){
+audioCtx=new window.AudioContext();
+audioCtx2=new window.AudioContext();
+
+}
+getAudio();
+    async function getAudio() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+ // const audioCtx = new AudioContext();
+ binit();
+ //drawAudio('/musik/ex.ogg');
+ audioCtx.resume().then(function(){
+	 drawAudio('/musik/ex.ogg');
+  analyzer = audioCtx.createAnalyser();
+  const source = audioCtx.createMediaStreamSource(stream);
+  source.connect(analyzer);
+})
+}
+/**
+ * Filters the AudioBuffer retrieved from an external source
+ * @param {AudioBuffer} audioBuffer the AudioBuffer from drawAudio()
+ * @returns {Array} an array of floating point numbers
+ */
+ //audio.onplay=function(e){alert(1)}
+const filterData = audioBuffer => {
+  const rawData = audioBuffer.getChannelData(0); // We only need to worknumbersnumbersnumbersnumbersnumbersnumbers with one channel of data
+  const samples = 70; // Number of samples we want to have in our final data set
+  const blockSize = Math.floor(rawData.length / samples); // the number of samples in each subdivision
+  const filteredData = [];
+  for (let i = 0; i < samples; i++) {
+    let blockStart = blockSize * i; // the location of the first sample in the block
+    let sum = 0;
+    for (let j = 0; j < blockSize; j++) {
+      sum = sum + Math.abs(rawData[blockStart + j]); // find the sum of all the samples in the block
+    }
+    filteredData.push(sum / blockSize); // divide the sum by the block size to get the average
+  }
+  return filteredData;
+};
+
+/**
+ * Normalizes the audio data to make a cleaner illustration 
+ * @param {Array} filteredData the data from filterData()
+ * @returns {Array} an normalized array of floating point numbers
+ */
+const normalizeData = filteredData => {
+    const multiplier = Math.pow(Math.max(...filteredData), -1);
+    return filteredData.map(n => n * multiplier);
+}
+
+/**
+ * Draws the audio file into a canvas element.
+ * @param {Array} normalizedData The filtered array returned from filterData()
+ <script>
+ * @returns {Array} a normalized array of data
+ */
+const draw = normalizedData => {
+  //alert('set up the canvas')
+  const canvas = document.getElementById("cnv2");
+  const dpr = window.devicePixelRatio || 1;
+  const padding = 20;
+  canvas.width = canvas.offsetWidth * dpr;
+  canvas.height = (canvas.offsetHeight + padding * 2) * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.translate(0, canvas.offsetHeight / 2 + padding); // set Y = 0 to be in the middle of the canvas
+
+  // draw the line segments
+  const width = canvas.offsetWidth / normalizedData.length;
+  for (let i = 0; i < normalizedData.length; i++) {
+    const x = width * i;
+    let height = normalizedData[i] * canvas.offsetHeight - padding;
+    if (height < 0) {
+        height = 0;
+    } else if (height > canvas.offsetHeight / 2) {
+        height = height > canvas.offsetHeight / 2;
+    }
+    drawLineSegment(ctx, x, height, width, (i + 1) % 2);
+  }
+};
+
+/**
+ * A utility function for drawing our line segments
+ * @param {AudioContext} ctx the audio context 
+ * @param {number} x  the x coordinate of the beginning of the line segment
+ * @param {number} height the desired height of the line segment
+ * @param {number} width the desired width of the line segment
+ * @param {boolean} isEven whether or not the segmented is even-numbered
+ */
+const drawLineSegment = (ctx, x, height, width, isEven) => {
+  ctx.lineWidth = 1; // 
+  console.log('how thick the line is');
+  ctx.strokeStyle = "#fff"; // what color our line is
+  ctx.beginPath();
+  height = isEven ? height : -height;
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, height);
+  ctx.arc(x + width / 2, height, width / 2, Math.PI, 0, isEven);
+  ctx.lineTo(x + width, 0);
+  ctx.stroke();
+};
+
+//drawAudio('/musik/ex.ogg');
+</script>
 <article id="rArticle">
 ${n.art ? n.art.art : 'Пусто.'}
 </article>

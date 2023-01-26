@@ -1,0 +1,78 @@
+<html>
+<body>
+<canvas height="400" id="meter" width="100"></canvas>
+
+<audio controls id="mum" src="ex.ogg">&nbsp;</audio>
+<button>start</button>
+<script>
+
+var cnv=document.getElementById('meter');
+var c=cnv.getContext('2d');
+
+
+var w=100;
+var h=400;
+var dau=document.getElementById('mum');
+
+var audio;
+var music = new Audio();
+music.src = 'ex.ogg';
+music.crossOrigin = "anonymous";
+
+ function init(){
+audio=new window.AudioContext();
+dau.crossOrigin = "anonymous";
+
+}
+dau.onplay=dawaj;
+document.querySelector('button').addEventListener('click', dawaj, false);
+function dawaj() {
+	init();
+  audio.resume().then(() => {
+    console.log('Playback resumed successfully');
+  
+    
+var analyser=audio.createScriptProcessor(1024,1,1);
+
+var source=audio.createMediaElementSource(music);
+source.crossOrigin = "anonymous";
+
+c.fillStyle='#555';
+c.fillRect(0,0,w,h);
+
+
+source.connect(audio.destination);
+source.connect(analyser);
+analyser.connect(audio.destination);
+
+
+analyser.onaudioprocess=function(e){
+	//alert(1);
+	
+		
+var out=e.outputBuffer.getChannelData(0);
+var int=e.inputBuffer.getChannelData(0);
+var max=0;
+for(var i=0;i<int.length;i++){
+out[i]=0;
+max=int[i]>max?int[i]:max;
+}
+var db=20*Math.log(Math.max(max,Math.pow(10,-72/20)))/Math.LN10;
+var grad=c.createLinearGradient(w/10,h*.2,w/10,h*.95);
+grad.addColorStop(0,'red');
+grad.addColorStop(-6/-72,'yellow');
+grad.addColorStop(1,'green');
+c.fillStyle='#555';
+c.fillRect(0,0,w,h);
+c.fillStyle=grad;
+c.fillRect(w/10,h*.8*(db/-72),w*8/10,(h*.95)-h*.8*(db/-72));
+c.fillStyle='white';
+c.font='Arial 12pt';
+c.fillText(Math.round(db*100)/100+'dB',w/2,h-h*.025);
+}
+  });
+}
+
+</script></p>
+</body>
+</html>
